@@ -18,7 +18,6 @@ const SummaryGenerator = (() => {
       }
       
       // Step 3: Generate enhanced summary by combining insights
-      // This uses the key elements to create a more focused summary
       const enhancedSummary = await this.generateEnhancedSummary(
         text, 
         basicSummary, 
@@ -37,19 +36,10 @@ const SummaryGenerator = (() => {
     async generateEnhancedSummary(text, basicSummary, keyElements, modelId, numSentences) {
       // For ML models that support abstractive summarization
       if (['gpt2', 'bart', 't5'].includes(modelId)) {
-        // These models would typically generate their own enhanced summary
-        // For this demo, we'll just simulate it with a modified extractive approach
-        
-        // Create a custom prompt with key themes
-        const themesList = keyElements.themes.slice(0, 5).map(theme => 
-          typeof theme === 'string' ? theme : theme.text
-        ).join(', ');
-        
-        // For real abstractive models, this would generate a new summary
-        // For our demo, we'll just use the basic summary with a slight modification
-        return `${basicSummary} [Key themes: ${themesList}]`;
+        // Generate a more abstractive summary using the rewriter
+        return TextRewriter.generateAbstractiveSummary(keyElements, basicSummary, numSentences);
       } 
-      // For extractive models, create an enhanced extractive summary
+      // For extractive models, create an enhanced extractive summary with light rewriting
       else {
         // Use key elements to identify the most important sentences
         // The idea is to ensure coverage of key themes/entities
@@ -102,7 +92,9 @@ const SummaryGenerator = (() => {
           .sort((a, b) => a.index - b.index)
           .map(item => item.sentence.trim());
         
-        return topSentences.join(' ');
+        // Apply abstractive transformations to the enhanced summary
+        const extractiveSummary = topSentences.join(' ');
+        return TextRewriter.transformSummary(extractiveSummary);
       }
     }
   };

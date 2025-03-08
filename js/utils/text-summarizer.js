@@ -121,8 +121,15 @@ const TextSummarizer = (() => {
         .sort((a, b) => a.index - b.index)
         .map(item => item.sentence);
         
-      // Step 6: Join selected sentences
-      return topSentences.join(' ');
+      // Step 6: Join selected sentences to create the extractive summary
+      const extractiveSummary = topSentences.join(' ');
+      
+      // Step 7: Apply simple abstractive transformations if rewriter is available
+      if (typeof TextRewriter !== 'undefined' && TextRewriter.transformSummary) {
+        return TextRewriter.transformSummary(extractiveSummary);
+      }
+      
+      return extractiveSummary;
     }
   };
 })();

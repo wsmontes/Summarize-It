@@ -90,10 +90,39 @@ const MLSummarizer = (() => {
         throw new Error("Please select a summarization model first");
       }
       
+      // Special handling for LLM-based model
+      if (modelInfo.usesLLM && typeof LLMHandler !== 'undefined') {
+        updateModelStatus("Processing with LLM...");
+        updateProgress(50);
+        
+        try {
+          // Use the LLM handler for summarization
+          const analysis = LLMHandler.analyzeContent(text);
+          const summary = await LLMHandler.generateSummary(text, {
+            contentType: analysis.contentType,
+            sentenceCount: numSentences
+          });
+          
+          updateProgress(100);
+          updateModelStatus("Ready for next summary");
+          
+          return summary;
+        } catch (error) {
+          console.error("LLM processing error:", error);
+          throw new Error(`Error with LLM processing: ${error.message}`);
+        }
+      }
+      
       // If this isn't an ML model, use the statistical approach instead
       if (!modelInfo.usesML) {
         return TextSummarizer.summarize(text, numSentences);
       }
+      
+      // For premium models like GPT-2, BART, T5, use more advanced abstractive simulation
+      const useAbstractive = ['gpt2', 'bart', 't5'].includes(modelId);
+      
+      // For these models, extract more sentences than needed for better material to rewrite
+      const extractionSentences = useAbstractive ? Math.min(numSentences * 2, 10) : numSentences;
       
       // For GPT-2, we would do more abstractive summarization
       // For this demo, we'll simulate different behavior for different model types
@@ -212,14 +241,45 @@ const MLSummarizer = (() => {
       const topSentences = sentences
         .map((sentence, index) => ({ sentence, score: scores[index], index }))
         .sort((a, b) => b.score - a.score)
-        .slice(0, numSentences)
+        .slice(0, extractionSentences)
         .sort((a, b) => a.index - b.index)
         .map(item => item.sentence);
         
+      const extractiveSummary = topSentences.join(' ');
+      
+      updateModelStatus("Enhancing summary...");
+      updateProgress(98);
+      
+      // Step 7: Transform extractive summary into more abstractive text
+      let finalSummary;
+      
+      // Professional models get more abstractive rewrites
+      if (useAbstractive) {
+        // Extract key elements for better abstractive generation
+        const keyElements = KeyElementsExtractor.extractKeyElements(text);
+        
+        // Simulate advanced abstractive summarization
+        if (modelId === 'gpt2') {
+          // GPT-2 would generate the most fluent and abstractive text
+          finalSummary = TextRewriter.generateAbstractiveSummary(keyElements, extractiveSummary, numSentences);
+        } else {
+          // BART and T5 are also very good at abstraction
+          finalSummary = TextRewriter.transformSummary(extractiveSummary.split('. ')
+            .slice(0, numSentences)
+            .join('. '));
+        }
+      } else {
+        // For standard models, just do basic sentence compression
+        finalSummary = extractiveSummary.split('. ')
+          .slice(0, numSentences)
+          .map(s => TextRewriter.compressSentence ? TextRewriter.compressSentence(s) : s)
+          .join('. ');
+      }
+      
       updateModelStatus("Ready for next summary");
       updateProgress(100);
       
-      return topSentences.join(' ');
+      return finalSummary;
     }
   };
 })();

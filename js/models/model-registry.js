@@ -133,6 +133,21 @@ const ModelRegistry = (() => {
       usesML: false,
       tier: "standard"
     },
+    // Add LLM-based model
+    llm: {
+      name: "LLM-Based Summarizer",
+      size: "0MB",
+      sizeClass: "xs",
+      speed: "Fast",
+      speedClass: "fast",
+      quality: "Excellent",
+      memory: "<50MB",
+      description: "Uses large language model techniques to generate more natural, fluid summaries. Works entirely in-browser with no external API calls.",
+      loadFunction: () => Promise.resolve(true),
+      usesML: true,
+      usesLLM: true,
+      tier: "premium"
+    },
     // Add a placeholder model
     placeholder: {
       name: "Select a model",
