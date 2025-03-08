@@ -33,16 +33,14 @@ const TextRewriter = (() => {
     return result;
   }
   
-  // Basic connection of sentences with transitions (fallback when LLM not available)
+  // Basic connection of sentences without using transitional phrases
   function addBasicTransitions(sentences) {
     if (sentences.length <= 1) return sentences;
     
-    const transitions = ['Additionally', 'Furthermore', 'Moreover', 'In contrast', 'However'];
-    
+    // Instead of adding transitional phrases, simply return the original sentences
+    // This creates a more direct style without linking words
     return sentences.map((sentence, index) => {
-      if (index === 0) return sentence;
-      const transition = transitions[index % transitions.length];
-      return `${transition}, ${sentence.charAt(0).toLowerCase() + sentence.slice(1)}`;
+      return sentence;
     });
   }
   

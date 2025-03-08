@@ -2,796 +2,1161 @@
  * LLM Handler - Manages interactions with language models for advanced text processing
  */
 const LLMHandler = (() => {
-  // Configuration for different summarization approaches
-  const PROMPT_TEMPLATES = {
-    summarize: {
-      basic: text => `Summarize the following text concisely:\n\n${text}`,
-      formal: text => `Create a formal summary of the following text:\n\n${text}`,
-      explanatory: text => `Explain the key points from this text:\n\n${text}`,
-      creative: text => `Rewrite this content in a creative, engaging way while preserving the key information:\n\n${text}`,
-      biographical: text => `Create a biographical summary focusing on the main person mentioned:\n\n${text}`,
-    },
-    
-    enhance: {
-      withThemes: (text, themes) => `Rewrite the following summary, incorporating these key themes: ${themes.join(", ")}.\n\nSummary: ${text}`,
-      withEntities: (text, entities) => `Enhance this summary by highlighting the role of these entities: ${entities.join(", ")}.\n\nSummary: ${text}`,
-      academic: text => `Rewrite this summary in a more academic style:\n\n${text}`,
-      simplified: text => `Simplify this summary to make it more accessible:\n\n${text}`
-    }
-  };
-  
-  /**
-   * Advanced text generation that simulates LLM capabilities
-   * with better coherence and variety
-   */
-  async function processWithLLM(prompt, options = {}) {
-    console.log("Processing with simulated LLM:", prompt.substring(0, 100) + "...");
-    
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    // Extract text from prompt
-    const inputText = prompt.includes("Summary:") ? 
-      prompt.split("Summary:")[1] : 
-      prompt.split("\n\n")[1] || prompt;
-    
-    // Parse requestedSentenceCount if specified
-    const requestedSentenceCount = options.sentenceCount || 3;
-    
-    // Extract original sentences
-    const sentences = inputText.match(/[^.!?]+[.!?]+/g) || [];
-    if (sentences.length === 0) return inputText;
-    
-    // Analyze text to get key elements for more adaptive summary generation
-    const analysisResult = analyzeTextForSummarization(inputText, sentences);
-    
-    // Generate summary using adaptive approach based on content type
-    const contentType = options.contentType || detectContentType(inputText);
-    
-    if (prompt.includes("key themes") || prompt.includes("incorporating these key themes")) {
-      // Get themes from prompt for theme-focused summary
-      const themesMatch = prompt.match(/themes:\s*([^.\n]+)/);
-      const themes = themesMatch ? 
-        themesMatch[1].split(',').map(t => t.trim()) : 
-        analysisResult.keyTopics;
-      
-      return generateAdaptiveSummary(sentences, analysisResult, themes, requestedSentenceCount);
-    }
-    else if (contentType === "biographical") {
-      return generateAdaptiveBiography(sentences, analysisResult);
-    }
-    else {
-      return generateAdaptiveSummary(sentences, analysisResult, [], requestedSentenceCount);
-    }
-  }
-  
-  /**
-   * Perform deeper text analysis to guide summary generation
-   */
-  function analyzeTextForSummarization(text, sentences) {
-    // Extract topics dynamically from the text
-    const topics = extractTopics(text);
-    
-    // Find main entities and concepts
-    const entities = extractEntities(text);
-    
-    // Identify key sentences for information preservation
-    const keyPositions = identifyStructurallyImportantSentences(sentences);
-    
-    // Determine primary action verbs
-    const actionVerbs = extractActionVerbs(text);
-    
-    // Find relationship words that can be used to connect ideas
-    const relationshipTerms = findRelationshipTerms(text);
-    
-    return {
-      keyTopics: topics.slice(0, 3),
-      supportingTopics: topics.slice(3),
-      mainEntities: entities.slice(0, 3),
-      keyPositions,
-      actionVerbs: actionVerbs.slice(0, 5),
-      relationshipTerms,
-      mainSentiment: detectSentiment(text),
-      isDescriptive: isDescriptiveText(text),
-      isPersuasive: isPersuasiveText(text),
-      complexity: assessTextComplexity(text)
+    // Prompt templates for different summarization/enhancement approaches.
+    const PROMPT_TEMPLATES = {
+      summarize: {
+        basic: text => `Summarize the following text concisely:\n\n${text}`,
+        formal: text => `Create a formal summary of the following text:\n\n${text}`,
+        explanatory: text => `Explain the key points from this text:\n\n${text}`,
+        creative: text => `Rewrite this content in a creative, engaging way while preserving the key information:\n\n${text}`,
+        biographical: text => `Create a biographical summary focusing on the main person mentioned:\n\n${text}`,
+      },
+      enhance: {
+        withThemes: (text, themes) =>
+          `Rewrite the following summary, incorporating these key themes: ${themes.join(
+            ", "
+          )}.\n\nSummary: ${text}`,
+        withEntities: (text, entities) =>
+          `Enhance this summary by highlighting the role of these entities: ${entities.join(
+            ", "
+          )}.\n\nSummary: ${text}`,
+        academic: text => `Rewrite this summary in a more academic style:\n\n${text}`,
+        simplified: text => `Simplify this summary to make it more accessible:\n\n${text}`,
+      },
     };
-  }
   
-  /**
-   * Extract main topics from text based on frequency and position
-   */
-  function extractTopics(text) {
-    const topics = [];
-    const lowerText = text.toLowerCase();
-    
-    // Look for noun phrases using regex patterns (simplified)
-    const nounPhrasePattern = /\b(?:[a-z]+ ){0,2}(?:information|technology|communication|data|process|system|method|approach|research|content|concept|principle|theory|model|framework|analysis|development|management|strategy|solution|world|exchange|media|platforms|tools|algorithms|language|processing|summarization)\b/g;
-    
-    // Find all matches with their positions
-    const matches = [];
-    let match;
-    while ((match = nounPhrasePattern.exec(lowerText)) !== null) {
-      if (match[0].length > 5) {
-        matches.push({
-          text: match[0].trim(),
-          position: match.index
-        });
+    /* ---------------- Helpers ---------------- */
+  
+    // Remove filler phrases using a given list.
+    const removeFillerPhrases = (text, phrases) =>
+      phrases.reduce(
+        (acc, phrase) => acc.replace(new RegExp(phrase, "gi"), ""),
+        text
+      );
+  
+    // Basic cleanup: spacing, punctuation, and capitalization.
+    function cleanText(text) {
+      let result = text.replace(/\s+/g, " ").trim();
+      result = result.replace(/\s+([,.;:])/g, "$1");
+      if (!result.match(/[.!?]$/)) result += ".";
+      return result.charAt(0).toUpperCase() + result.slice(1);
+    }
+  
+    // Capitalize first letter.
+    const capitalizeFirstLetter = string =>
+      string ? string.charAt(0).toUpperCase() + string.slice(1) : "";
+  
+    /* ---------------- Core Analysis Functions ---------------- */
+  
+    function analyzeTextForSummarization(text, sentences) {
+      const topics = extractTopics(text);
+      const entities = extractEntities(text);
+      const keyPositions = identifyStructurallyImportantSentences(sentences);
+      const actionVerbs = extractActionVerbs(text);
+      const relationshipTerms = findRelationshipTerms(text);
+  
+      return {
+        keyTopics: topics.slice(0, 3),
+        supportingTopics: topics.slice(3),
+        mainEntities: entities.slice(0, 3),
+        keyPositions,
+        actionVerbs: actionVerbs.slice(0, 5),
+        relationshipTerms,
+        mainSentiment: detectSentiment(text),
+        isDescriptive: isDescriptiveText(text),
+        isPersuasive: isPersuasiveText(text),
+        complexity: assessTextComplexity(text),
+      };
+    }
+  
+    function extractTopics(text) {
+      const lowerText = text.toLowerCase();
+      const entities = extractEntities(text);
+      const entitySet = new Set(entities.map(e => e.toLowerCase()));
+  
+      const nounPhrasePattern = /\b(?:[a-z]+ ){0,2}(?:information|technology|communication|data|process|system|method|approach|research|content|concept|principle|theory|model|framework|analysis|development|management|strategy|solution|world|exchange|media|platforms|tools|algorithms|language|processing|summarization)\b/g;
+      let matches = [];
+      let match;
+      while ((match = nounPhrasePattern.exec(lowerText)) !== null) {
+        const phrase = match[0].trim();
+        if (phrase.length > 5 && ![...entitySet].some(e => e.includes(phrase))) {
+          matches.push({ text: phrase, position: match.index });
+        }
       }
+      const uniqueTopics = Array.from(new Set(matches.map(m => m.text)));
+      const scoredTopics = uniqueTopics.map(topic => {
+        const occurrences = matches.filter(m => m.text === topic);
+        const frequency = occurrences.length;
+        const avgPosition =
+          occurrences.reduce((sum, m) => sum + m.position, 0) /
+          (occurrences.length * lowerText.length);
+        return { topic, score: frequency * (1 - avgPosition * 0.5) };
+      });
+      return scoredTopics
+        .sort((a, b) => b.score - a.score)
+        .map(item => item.topic);
     }
-    
-    // Get unique topics
-    const uniqueTopics = Array.from(new Set(matches.map(m => m.text)));
-    
-    // Score topics by frequency and position (earlier is better)
-    const scoredTopics = uniqueTopics.map(topic => {
-      const occurrences = matches.filter(m => m.text === topic);
-      const frequency = occurrences.length;
-      
-      // Average position in text (normalized to 0-1 range)
-      const avgPosition = occurrences.reduce((sum, m) => sum + m.position, 0) / 
-                          (occurrences.length * lowerText.length);
-      
-      // Favor topics mentioned early and frequently
-      const score = frequency * (1 - avgPosition*0.5);
-      
-      return { topic, score };
-    });
-    
-    // Return topics sorted by score
-    return scoredTopics
-      .sort((a, b) => b.score - a.score)
-      .map(item => item.topic);
-  }
   
-  /**
-   * Extract entities like proper nouns, organizations, etc.
-   */
-  function extractEntities(text) {
-    const entities = [];
-    
-    // Look for capitalized phrases (likely proper nouns)
-    const properNounPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g;
-    
-    let match;
-    while ((match = properNounPattern.exec(text)) !== null) {
-      if (match[0].length > 2 && !match[0].match(/^(The|A|An|This|That|These|Those|It|They|We|I|You|He|She)$/)) {
-        entities.push(match[0]);
+    function extractEntities(text) {
+      const entities = [];
+      const fullNamePattern = /\b([A-Z][a-zÀ-ÿ]+(?:\s+(?:[A-Z][a-zÀ-ÿ]+|d[aeo]\s+[A-Z][a-zÀ-ÿ]+|d[aeo]|van|von|del|la|el|bin|ibn|al))+)\b/g;
+      let match;
+      while ((match = fullNamePattern.exec(text)) !== null) {
+        if (match[1].length > 2) entities.push(match[1]);
       }
-    }
-    
-    // Count frequencies
-    const entityCounts = {};
-    entities.forEach(entity => {
-      entityCounts[entity] = (entityCounts[entity] || 0) + 1;
-    });
-    
-    // Return entities sorted by frequency
-    return Object.entries(entityCounts)
-      .sort((a, b) => b[1] - a[1])
-      .map(([entity]) => entity);
-  }
-  
-  /**
-   * Identify sentences that are structurally important (intro, conclusion, topic sentences)
-   */
-  function identifyStructurallyImportantSentences(sentences) {
-    const important = [];
-    
-    if (sentences.length === 0) return important;
-    
-    // First sentence is often important
-    if (sentences.length > 0) {
-      important.push(0);
-    }
-    
-    // Last sentence is often a conclusion
-    if (sentences.length > 1) {
-      important.push(sentences.length - 1);
-    }
-    
-    // Look for sentences that introduce new topics
-    sentences.forEach((sentence, idx) => {
-      if (idx > 0 && idx < sentences.length - 1) {
-        const lowerSentence = sentence.toLowerCase();
-        
-        // Topic sentence indicators
+      const properNounPattern = /\b[A-Z][a-zÀ-ÿ]+(?:\s+[A-Z][a-zÀ-ÿ]+)*\b/g;
+      while ((match = properNounPattern.exec(text)) !== null) {
         if (
-          lowerSentence.match(/\b(first|second|third|finally|moreover|furthermore|in addition|another|importantly)\b/i) ||
-          lowerSentence.match(/\b(however|nevertheless|conversely|in contrast|on the other hand)\b/i)
+          match[0].length > 2 &&
+          !match[0].match(/^(The|A|An|This|That|These|Those|It|They|We|I|You|He|She)$/)
         ) {
-          important.push(idx);
+          entities.push(match[0]);
         }
       }
-    });
-    
-    return important;
-  }
-  
-  /**
-   * Extract action verbs that represent main actions in the text
-   */
-  function extractActionVerbs(text) {
-    const commonVerbs = [
-      'discuss', 'explore', 'analyze', 'present', 'describe',
-      'explain', 'demonstrate', 'show', 'highlight', 'emphasize',
-      'suggest', 'reveal', 'indicate', 'provide', 'address',
-      'examine', 'investigate', 'develop', 'create', 'enhance'
-    ];
-    
-    const verbsFound = [];
-    
-    commonVerbs.forEach(verb => {
-      const verbForms = [verb, verb+'s', verb+'ed', verb+'ing'];
-      
-      verbForms.forEach(form => {
-        if (text.toLowerCase().includes(` ${form} `)) {
-          verbsFound.push(verb);
-        }
+      // Name fragments handling (optional extra processing) can be added here.
+      // For brevity, we simply return the entities sorted by frequency.
+      const entityCounts = {};
+      entities.forEach(entity => {
+        const count =
+          (text.match(new RegExp(`\\b${entity.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "g")) || []).length;
+        entityCounts[entity] = (entityCounts[entity] || 0) + count;
       });
-    });
-    
-    return [...new Set(verbsFound)];
-  }
-  
-  /**
-   * Find terms that express relationships between ideas
-   */
-  function findRelationshipTerms(text) {
-    const relationships = [
-      { type: 'causal', terms: ['because', 'therefore', 'thus', 'as a result', 'consequently', 'due to', 'leads to'] },
-      { type: 'contrast', terms: ['however', 'although', 'despite', 'while', 'whereas', 'nevertheless', 'in contrast'] },
-      { type: 'addition', terms: ['furthermore', 'moreover', 'additionally', 'in addition', 'also', 'besides'] },
-      { type: 'example', terms: ['for example', 'for instance', 'such as', 'specifically', 'particularly'] },
-      { type: 'emphasis', terms: ['importantly', 'significantly', 'notably', 'crucially', 'essentially'] }
-    ];
-    
-    const found = {};
-    
-    relationships.forEach(({ type, terms }) => {
-      terms.forEach(term => {
-        if (text.toLowerCase().includes(term)) {
-          found[type] = found[type] || [];
-          found[type].push(term);
-        }
-      });
-    });
-    
-    return found;
-  }
-  
-  /**
-   * Simple sentiment detection (positive, negative, neutral)
-   */
-  function detectSentiment(text) {
-    const positiveWords = ['good', 'great', 'excellent', 'positive', 'valuable', 'beneficial', 'advantage', 'improvement', 'enhance', 'solution'];
-    const negativeWords = ['bad', 'problem', 'challenge', 'difficult', 'issue', 'concern', 'negative', 'risk', 'threat', 'disadvantage'];
-    
-    const lowerText = text.toLowerCase();
-    
-    let positiveScore = 0;
-    let negativeScore = 0;
-    
-    positiveWords.forEach(word => {
-      const regex = new RegExp(`\\b${word}\\w*\\b`, 'g');
-      const matches = lowerText.match(regex);
-      if (matches) positiveScore += matches.length;
-    });
-    
-    negativeWords.forEach(word => {
-      const regex = new RegExp(`\\b${word}\\w*\\b`, 'g');
-      const matches = lowerText.match(regex);
-      if (matches) negativeScore += matches.length;
-    });
-    
-    if (positiveScore > negativeScore * 1.5) return 'positive';
-    if (negativeScore > positiveScore * 1.5) return 'negative';
-    return 'neutral';
-  }
-  
-  /**
-   * Check if text is primarily descriptive
-   */
-  function isDescriptiveText(text) {
-    const descriptiveIndicators = [
-      'is', 'are', 'was', 'were', 'appears', 'seems',
-      'looks', 'contains', 'includes', 'consists'
-    ];
-    
-    let descriptiveScore = 0;
-    const lowerText = text.toLowerCase();
-    
-    descriptiveIndicators.forEach(word => {
-      const regex = new RegExp(`\\b${word}\\b`, 'g');
-      const matches = lowerText.match(regex);
-      if (matches) descriptiveScore += matches.length;
-    });
-    
-    return descriptiveScore > text.split(/\s+/).length / 25;
-  }
-  
-  /**
-   * Check if text is persuasive/argumentative
-   */
-  function isPersuasiveText(text) {
-    const persuasiveIndicators = [
-      'should', 'must', 'need to', 'important', 'essential', 'critical',
-      'argue', 'argument', 'claim', 'support', 'evidence', 'prove'
-    ];
-    
-    let persuasiveScore = 0;
-    const lowerText = text.toLowerCase();
-    
-    persuasiveIndicators.forEach(word => {
-      const regex = new RegExp(`\\b${word}\\b`, 'g');
-      const matches = lowerText.match(regex);
-      if (matches) persuasiveScore += matches.length;
-    });
-    
-    return persuasiveScore > text.split(/\s+/).length / 30;
-  }
-  
-  /**
-   * Assess text complexity based on sentence length and word length
-   */
-  function assessTextComplexity(text) {
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
-    if (sentences.length === 0) return 'medium';
-    
-    const words = text.match(/\b[\w']+\b/g) || [];
-    if (words.length === 0) return 'medium';
-    
-    const avgWordsPerSentence = words.length / sentences.length;
-    const avgWordLength = words.join('').length / words.length;
-    
-    const complexityScore = (avgWordsPerSentence / 10) + (avgWordLength / 4);
-    
-    if (complexityScore > 3) return 'high';
-    if (complexityScore < 2) return 'low';
-    return 'medium';
-  }
-  
-  /**
-   * Generate a completely adaptive summary based on content analysis
-   */
-  function generateAdaptiveSummary(sentences, analysis, themes, sentenceCount) {
-    // Track used phrases to avoid repetition
-    const usedPhrases = new Set();
-    const usedIntroPatterns = new Set();
-    
-    // Segment the input text into meaningful sections rather than just sentences
-    const sections = segmentIntoSections(sentences);
-    
-    // Get main topics either from provided themes or from analysis
-    const topics = themes.length > 0 ? themes : analysis.keyTopics;
-    const entities = analysis.mainEntities;
-    
-    // INTRO: Build intro sentence using more varied patterns and creativity
-    let introSentence = "";
-    const introPatterns = [
-      topic => `The text examines the importance of ${topic} in modern contexts.`,
-      (topic, secondTopic) => `${capitalizeFirstLetter(topic)} is a central focus in this discussion of ${secondTopic}.`,
-      topic => `This content addresses key aspects of ${topic} and its implications.`,
-      (topic, verb) => `The author ${verb}s how ${topic} impacts various domains.`,
-      topic => `An analysis of ${topic} reveals several important insights.`
-    ];
-    
-    // Select intro pattern ensuring we don't use the "This text analyzes" pattern repeatedly
-    const chooseIntroPattern = () => {
-      let pattern;
-      let attempts = 0;
-      do {
-        pattern = introPatterns[Math.floor(Math.random() * introPatterns.length)];
-        attempts++;
-      } while (usedIntroPatterns.has(pattern.toString()) && attempts < 10);
-      
-      usedIntroPatterns.add(pattern.toString());
-      return pattern;
-    };
-    
-    if (topics.length > 0) {
-      const mainTopic = topics[0];
-      const secondaryTopic = topics.length > 1 ? topics[1] : null;
-      const verb = analysis.actionVerbs.length > 0 ? analysis.actionVerbs[0] : "discuss";
-      
-      const introPattern = chooseIntroPattern();
-      
-      if (secondaryTopic && introPattern.length >= 2) {
-        introSentence = introPattern(mainTopic, secondaryTopic);
-      } else if (introPattern.length >= 2) {
-        introSentence = introPattern(mainTopic, verb);
-      } else {
-        introSentence = introPattern(mainTopic);
-      }
-      
-      usedPhrases.add(mainTopic);
-      if (secondaryTopic) usedPhrases.add(secondaryTopic);
-    } else {
-      introSentence = "The document explores several interconnected concepts and their implications.";
+      return Object.entries(entityCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([entity]) => entity);
     }
-    
-    // Extract key insights from different sections of the text to ensure variety
-    const keyInsights = extractDistinctInsights(sections, topics, usedPhrases);
-    
-    // BODY: Select insights from different sections of the text
-    const bodyCount = Math.max(1, sentenceCount - 2); // Adjust based on required sentence count
-    const bodyInsights = keyInsights.slice(0, bodyCount);
-    
-    // Create body sentences with varied structures
-    const bodySentences = bodyInsights.map(insight => {
-      // Create a sentence that doesn't repeat already used phrases
-      return generateNonRepetitiveSentence(insight, topics, usedPhrases);
-    });
-    
-    // CONCLUSION: Create a conclusion that brings everything together
-    let conclusionSentence = "";
-    
-    // Extract an actual concluding sentence if available
-    const concludingSentences = sentences.slice(-2);
-    const hasActualConclusion = concludingSentences.some(s => 
-      s.match(/(?:in conclusion|to summarize|overall|ultimately|therefore|thus)/i)
-    );
-    
-    if (hasActualConclusion) {
-      // Use the actual conclusion from the text
-      const actualConclusion = concludingSentences.find(s => 
+  
+    function identifyStructurallyImportantSentences(sentences) {
+      const important = [];
+      if (!sentences.length) return important;
+      important.push(0); // First sentence
+      if (sentences.length > 1) important.push(sentences.length - 1); // Last sentence
+      sentences.forEach((sentence, idx) => {
+        if (idx > 0 && idx < sentences.length - 1) {
+          const lowerSentence = sentence.toLowerCase();
+          if (
+            lowerSentence.match(
+              /\b(first|second|third|finally|moreover|furthermore|in addition|another|importantly)\b/i
+            ) ||
+            lowerSentence.match(/\b(however|nevertheless|conversely|in contrast|on the other hand)\b/i)
+          ) {
+            important.push(idx);
+          }
+        }
+      });
+      return important;
+    }
+  
+    function extractActionVerbs(text) {
+      const commonVerbs = [
+        "discuss",
+        "explore",
+        "analyze",
+        "present",
+        "describe",
+        "explain",
+        "demonstrate",
+        "show",
+        "highlight",
+        "emphasize",
+        "suggest",
+        "reveal",
+        "indicate",
+        "provide",
+        "address",
+        "examine",
+        "investigate",
+        "develop",
+        "create",
+        "enhance",
+      ];
+      const verbsFound = [];
+      commonVerbs.forEach(verb => {
+        const forms = [verb, verb + "s", verb + "ed", verb + "ing"];
+        forms.forEach(form => {
+          if (text.toLowerCase().includes(` ${form} `)) {
+            verbsFound.push(verb);
+          }
+        });
+      });
+      return [...new Set(verbsFound)];
+    }
+  
+    function findRelationshipTerms(text) {
+      const relationships = [
+        { type: "causal", terms: ["because", "therefore", "thus", "as a result", "consequently", "due to", "leads to"] },
+        { type: "contrast", terms: ["however", "although", "despite", "while", "whereas", "nevertheless", "in contrast"] },
+        { type: "addition", terms: ["furthermore", "moreover", "additionally", "in addition", "also", "besides"] },
+        { type: "example", terms: ["for example", "for instance", "such as", "specifically", "particularly"] },
+        { type: "emphasis", terms: ["importantly", "significantly", "notably", "crucially", "essentially"] },
+      ];
+      const found = {};
+      relationships.forEach(({ type, terms }) => {
+        terms.forEach(term => {
+          if (text.toLowerCase().includes(term)) {
+            found[type] = found[type] || [];
+            found[type].push(term);
+          }
+        });
+      });
+      return found;
+    }
+  
+    function detectSentiment(text) {
+      const positiveWords = [
+        "good",
+        "great",
+        "excellent",
+        "positive",
+        "valuable",
+        "beneficial",
+        "advantage",
+        "improvement",
+        "enhance",
+        "solution",
+      ];
+      const negativeWords = [
+        "bad",
+        "problem",
+        "challenge",
+        "difficult",
+        "issue",
+        "concern",
+        "negative",
+        "risk",
+        "threat",
+        "disadvantage",
+      ];
+      const lowerText = text.toLowerCase();
+      let positiveScore = 0,
+        negativeScore = 0;
+      positiveWords.forEach(word => {
+        const regex = new RegExp(`\\b${word}\\w*\\b`, "g");
+        const matches = lowerText.match(regex);
+        if (matches) positiveScore += matches.length;
+      });
+      negativeWords.forEach(word => {
+        const regex = new RegExp(`\\b${word}\\w*\\b`, "g");
+        const matches = lowerText.match(regex);
+        if (matches) negativeScore += matches.length;
+      });
+      if (positiveScore > negativeScore * 1.5) return "positive";
+      if (negativeScore > positiveScore * 1.5) return "negative";
+      return "neutral";
+    }
+  
+    function isDescriptiveText(text) {
+      const indicators = ["is", "are", "was", "were", "appears", "seems", "looks", "contains", "includes", "consists"];
+      let score = 0;
+      const lowerText = text.toLowerCase();
+      indicators.forEach(word => {
+        const regex = new RegExp(`\\b${word}\\b`, "g");
+        const matches = lowerText.match(regex);
+        if (matches) score += matches.length;
+      });
+      return score > text.split(/\s+/).length / 25;
+    }
+  
+    function isPersuasiveText(text) {
+      const indicators = [
+        "should",
+        "must",
+        "need to",
+        "important",
+        "essential",
+        "critical",
+        "argue",
+        "argument",
+        "claim",
+        "support",
+        "evidence",
+        "prove",
+      ];
+      let score = 0;
+      const lowerText = text.toLowerCase();
+      indicators.forEach(word => {
+        const regex = new RegExp(`\\b${word}\\b`, "g");
+        const matches = lowerText.match(regex);
+        if (matches) score += matches.length;
+      });
+      return score > text.split(/\s+/).length / 30;
+    }
+  
+    function assessTextComplexity(text) {
+      const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+      if (!sentences.length) return "medium";
+      const words = text.match(/\b[\w']+\b/g) || [];
+      if (!words.length) return "medium";
+      const avgWordsPerSentence = words.length / sentences.length;
+      const avgWordLength = words.join("").length / words.length;
+      const complexityScore = avgWordsPerSentence / 10 + avgWordLength / 4;
+      if (complexityScore > 3) return "high";
+      if (complexityScore < 2) return "low";
+      return "medium";
+    }
+  
+    function assessTextConfidence(text, analysis = {}) {
+      let confidence = 0.5; // Base confidence.
+      if (text.match(/^[A-Z].+[.!?]$/)) confidence += 0.1;
+      const words = text.split(/\s+/);
+      if (words.length > 30) confidence -= 0.1;
+      if (words.length < 8) confidence -= 0.05;
+      const preciseTerms = ["specifically", "precisely", "exactly", "clearly", "demonstrates", "proves"];
+      for (const term of preciseTerms) {
+        if (text.toLowerCase().includes(term)) {
+          confidence += 0.05;
+          break;
+        }
+      }
+      const vagueTerms = ["sort of", "kind of", "maybe", "perhaps", "might", "could be", "somewhat"];
+      for (const term of vagueTerms) {
+        if (text.toLowerCase().includes(term)) {
+          confidence -= 0.05;
+          break;
+        }
+      }
+      if (analysis.keyTopics && analysis.keyTopics.length > 0) {
+        const count = analysis.keyTopics.reduce(
+          (cnt, topic) =>
+            text.toLowerCase().includes(topic.toLowerCase()) ? cnt + 1 : cnt,
+          0
+        );
+        confidence += 0.05 * Math.min(3, count);
+      }
+      if (analysis.mainEntities && analysis.mainEntities.length > 0) {
+        const count = analysis.mainEntities.reduce(
+          (cnt, entity) => (text.includes(entity) ? cnt + 1 : cnt),
+          0
+        );
+        if (count > 0) confidence += 0.1;
+      }
+      if (analysis.keyPositions && analysis.keyPositions.length > 0) {
+        if (analysis.keyPositions.includes(0) || analysis.keyPositions.includes(analysis.keyPositions.length - 1)) {
+          confidence += 0.1;
+        }
+      }
+      if (/\b(therefore|thus|consequently|as a result|however|moreover|furthermore|in conclusion|to summarize|finally)\b/i.test(text)) {
+        confidence += 0.05;
+      }
+      return Math.max(0.1, Math.min(0.9, confidence));
+    }
+  
+    // Extract 4+ word phrases to help preserve key parts of original text.
+    function extractKeyPhrases(text) {
+      const phrases = [];
+      const words = text.split(/\s+/);
+      if (words.length < 4) return phrases;
+      for (let i = 0; i <= words.length - 4; i++) {
+        for (let len = 4; len <= Math.min(7, words.length - i); len++) {
+          const phrase = words.slice(i, i + len).join(" ");
+          if (
+            !phrase.match(/^(this|that|these|those|it|there|here|when|while)\s/i) &&
+            phrase.match(/\b\w{5,}\b/) &&
+            phrase.split(/\s+/).filter(w => w.length < 4).length < phrase.split(/\s+/).length / 2
+          ) {
+            phrases.push(phrase);
+          }
+        }
+      }
+      return phrases;
+    }
+  
+    // Extract main verb from a sentence using common verbs.
+    function extractMainVerb(text) {
+      const commonVerbs = [
+        "discuss",
+        "explore",
+        "analyze",
+        "present",
+        "describe",
+        "explain",
+        "demonstrate",
+        "show",
+        "highlight",
+        "emphasize",
+        "suggest",
+        "reveal",
+        "indicate",
+        "provide",
+        "address",
+      ];
+      for (const verb of commonVerbs) {
+        const forms = [verb, `${verb}s`, `${verb}ed`, `${verb}ing`];
+        for (const form of forms) {
+          if (text.toLowerCase().match(new RegExp(`\\b${form}\\b`))) {
+            return verb;
+          }
+        }
+      }
+      return null;
+    }
+  
+    /* ---------------- Adaptive Rewriting ---------------- */
+  
+    /**
+     * Adaptively rewrite a sentence based on analysis confidence.
+     * It preserves key entities (using placeholders), removes filler phrases,
+     * and—if needed—injects unused topics to avoid repetition.
+     */
+    function rewriteAdaptively(sentence, analysis = {}, topics = [], usedPhrases = new Set()) {
+      const confidence = assessTextConfidence(sentence, analysis);
+      const originalSentence = sentence;
+      let result = sentence;
+  
+      // Protect entities by replacing them with placeholders.
+      const preservedEntities = (analysis.mainEntities || []);
+      const entityPlaceholders = {};
+      let counter = 0;
+      preservedEntities
+        .sort((a, b) => b.length - a.length)
+        .forEach(entity => {
+          const placeholder = `__ENTITY_${counter++}__`;
+          entityPlaceholders[placeholder] = entity;
+          const regex = new RegExp(`\\b${entity.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&`)}\\b`, "g");
+          result = result.replace(regex, placeholder);
+        });
+  
+      // Define filler phrases.
+      const highConfidenceFillers = ["in other words"];
+      const mediumLowFillers = [
+        "it is important to note that",
+        "it should be noted that",
+        "it is worth noting that",
+        "in other words",
+        "as you can see",
+        "as a matter of fact",
+        "it can be said that",
+        "needless to say",
+        "as mentioned earlier",
+      ];
+  
+      if (confidence > 0.7) {
+        result = removeFillerPhrases(result, highConfidenceFillers);
+      } else if (confidence > 0.4) {
+        result = removeFillerPhrases(result, mediumLowFillers);
+        // Vary sentence starter if needed.
+        if (result.match(/^(This text|The text)\s+(analyze|analyzes|discuss|discusses|describe|describes)/i)) {
+          const starters = [
+            "The content highlights how",
+            "The document explains that",
+            "The analysis shows that",
+            "The discussion reveals that",
+          ];
+          result = result.replace(
+            /^(This text|The text)\s+(analyze|analyzes|discuss|discusses|describe|describes)/i,
+            starters[Math.floor(Math.random() * starters.length)]
+          );
+        }
+        result = result.replace(/\b(text|content|document|analysis)\s+analyze\b/i, "$1 analyzes");
+      } else {
+        // For low confidence, attempt an aggressive rewrite with unused topics.
+        if (topics.length > 0) {
+          const unusedTopics = topics.filter(t => !usedPhrases.has(t));
+          if (unusedTopics.length > 0) {
+            const topic = unusedTopics[0];
+            const mainVerb = extractMainVerb(result);
+            const mainVerbPhrase = mainVerb ? ` ${mainVerb}s ` : " discusses ";
+            const newSentences = [
+              `${capitalizeFirstLetter(topic)}${mainVerbPhrase}key aspects covered in the content.`,
+              `The significance of ${topic} becomes apparent in this context.`,
+              `When examining ${topic}, several important insights emerge.`,
+              `${capitalizeFirstLetter(topic)} represents a central consideration in this analysis.`,
+            ];
+            result = newSentences[Math.floor(Math.random() * newSentences.length)];
+            usedPhrases.add(topic);
+          }
+        }
+        result = removeFillerPhrases(result, mediumLowFillers);
+      }
+  
+      result = cleanText(result);
+  
+      // Restore entity placeholders.
+      Object.entries(entityPlaceholders).forEach(([placeholder, entity]) => {
+        result = result.replace(new RegExp(placeholder, "g"), entity);
+      });
+  
+      // Optionally, for medium/high confidence, try inserting a key phrase from the original.
+      if (confidence > 0.4 && originalSentence !== result) {
+        const originalPhrases = extractKeyPhrases(originalSentence);
+        if (originalPhrases.length > 0 && result.length > 20) {
+          const phrase = originalPhrases[Math.floor(Math.random() * originalPhrases.length)];
+          if (!result.includes(phrase) && phrase.length > 10) {
+            const midPoint = Math.floor(result.length / 2);
+            let insertPoint = result.indexOf(". ", midPoint);
+            if (insertPoint === -1) insertPoint = result.indexOf(", ", midPoint);
+            if (insertPoint !== -1) {
+              result =
+                result.substring(0, insertPoint + 2) +
+                'as the original text states, "' +
+                phrase +
+                '"' +
+                result.substring(insertPoint + 2);
+            }
+          }
+        }
+      }
+      return cleanText(result);
+    }
+  
+    /* ---------------- Adaptive Summary Generation ---------------- */
+  
+    // Segment sentences into sections based on boundaries without relying on transition words
+    function segmentIntoSections(sentences) {
+      if (sentences.length <= 3) return [sentences];
+      const sections = [];
+      let currentSection = [];
+      sentences.forEach((sentence, index) => {
+        currentSection.push(sentence);
+        const lowerSentence = sentence.toLowerCase();
+        // Avoid detecting transitions but still segment on other indicators
+        const isBoundary =
+          sentence.endsWith(".") &&
+          (lowerSentence.match(/(therefore|thus|in conclusion|to summarize|consequently|as a result)/) ||
+            currentSection.length >= 3);
+        if (isBoundary && currentSection.length > 0) {
+          sections.push([...currentSection]);
+          currentSection = [];
+        }
+      });
+      if (currentSection.length > 0) sections.push(currentSection);
+      return sections;
+    }
+  
+    // Extract distinct insights from each section while avoiding repetition.
+    function extractDistinctInsights(sections, topics, usedPhrases) {
+      const insights = [];
+      sections.forEach(section => {
+        if (!section.length) return;
+        const sectionInsights = section.map(sentence => {
+          if (containsAnyPhrase(sentence, Array.from(usedPhrases))) {
+            return { sentence, uniqueness: 0 };
+          }
+          const uniqueTopics = topics.filter(
+            topic => sentence.toLowerCase().includes(topic.toLowerCase()) && !usedPhrases.has(topic)
+          );
+          return { sentence, uniqueness: uniqueTopics.length, topics: uniqueTopics };
+        });
+        const bestInsight = sectionInsights.sort((a, b) => b.uniqueness - a.uniqueness)[0];
+        if (bestInsight && bestInsight.uniqueness > 0) {
+          insights.push(bestInsight.sentence);
+          bestInsight.topics.forEach(topic => usedPhrases.add(topic));
+        } else if (section.length > 0) {
+          insights.push(section[0]);
+        }
+      });
+      return insights;
+    }
+  
+    // Check if text contains any of the specified phrases (with a threshold).
+    function containsAnyPhrase(text, phrases, threshold = 1) {
+      const lowerText = text.toLowerCase();
+      let matches = 0;
+      for (const phrase of phrases) {
+        if (phrase && phrase.length > 3 && lowerText.includes(phrase.toLowerCase())) {
+          matches++;
+          if (matches >= threshold) return true;
+        }
+      }
+      return false;
+    }
+  
+    // Generate a non-repetitive sentence focusing on an unused topic.
+    function generateNonRepetitiveSentence(baseSentence, topics, usedPhrases) {
+      if (containsAnyPhrase(baseSentence, Array.from(usedPhrases), 2)) {
+        const unusedTopics = topics.filter(t => !usedPhrases.has(t));
+        if (unusedTopics.length > 0) {
+          const topic = unusedTopics[0];
+          usedPhrases.add(topic);
+          const patterns = [
+            t => `${capitalizeFirstLetter(t)} facilitates more effective information processing.`,
+            t => `The concept of ${t} addresses key challenges in this context.`,
+            t => `Advancements in ${t} continue to shape this field.`,
+          ];
+          return patterns[Math.floor(Math.random() * patterns.length)](topic);
+        }
+      }
+      return rewriteAdaptively(baseSentence, {}, topics, usedPhrases);
+    }
+  
+    // Final pass to improve overall text quality and remove near-duplicate sentences.
+    function improveTextQuality(text) {
+      const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+      if (sentences.length <= 1) return text;
+      const uniqueSentences = [];
+      const seenKeys = new Set();
+      
+      // Filter out sentences that begin with transition words
+      const filteredSentences = sentences.filter(sentence => 
+        !sentence.match(/^(furthermore|moreover|additionally|however|thus|therefore|in addition|consequently)/i)
+      );
+      
+      // If filtering removed all sentences, use original sentences
+      const workingSentences = filteredSentences.length > 0 ? filteredSentences : sentences;
+      
+      workingSentences.forEach(sentence => {
+        // Remove transition words from beginning of sentences
+        let processedSentence = sentence.replace(/^(furthermore|moreover|additionally|however|thus|therefore|in addition|consequently)[,]?\s+/i, '');
+        
+        const key = processedSentence
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, " ")
+          .split(/\s+/)
+          .filter(w => w.length > 3)
+          .slice(0, 5)
+          .join(" ");
+          
+        if (key.length > 10 && seenKeys.has(key)) {
+          if (processedSentence.match(/^(This|The)/)) {
+            const simpleSentence = processedSentence
+              .replace(/^(This|The)\s+[^.!?]+?(is|are|has|have|can|will|may)/i, "It $2")
+              .replace(/^(This|The)\s+[^.!?]+?(analyze|discusses|describes|shows|presents|highlights)/i, "We see that it $2");
+            uniqueSentences.push(simpleSentence);
+          }
+        } else if (key.length > 0) {
+          seenKeys.add(key);
+          uniqueSentences.push(processedSentence);
+        }
+      });
+      
+      // Join directly with spaces, not adding any transitions
+      return uniqueSentences.join(" ");
+    }
+  
+    /* ---------------- Summary & Biography Generation ---------------- */
+  
+    /**
+     * Generate a completely adaptive summary based on content analysis
+     * With dynamic sentence construction instead of templates
+     */
+    function generateAdaptiveSummary(sentences, analysis, themes, sentenceCount) {
+      // Track used phrases to avoid repetition
+      const usedPhrases = new Set();
+      const preservedEntities = new Set();
+      
+      // Add entities to preserved set to ensure they're not fragmented
+      if (analysis.mainEntities && analysis.mainEntities.length > 0) {
+        analysis.mainEntities.forEach(entity => preservedEntities.add(entity));
+      }
+      
+      // Segment the input text into meaningful sections
+      const sections = segmentIntoSections(sentences);
+      
+      // Get main topics either from provided themes or from analysis
+      const topics = themes.length > 0 ? themes : analysis.keyTopics;
+      
+      // Filter topics to exclude entity fragments
+      const filteredTopics = topics.filter(topic => {
+        // Check if this topic is just a part of an entity we need to preserve
+        for (const entity of preservedEntities) {
+          if (entity.toLowerCase().includes(topic.toLowerCase()) && entity.toLowerCase() !== topic.toLowerCase()) {
+            return false;
+          }
+        }
+        return true;
+      });
+      
+      // INTRO: Extract and adapt sentence structures from the original text
+      let introSentence = "";
+      if (sentences.length > 0) {
+        // Find a good candidate sentence to adapt for intro
+        const introductorySentences = sentences.slice(0, Math.min(3, sentences.length));
+        const sentenceStructures = extractSentenceStructures(introductorySentences);
+        
+        if (filteredTopics.length > 0 && sentenceStructures.length > 0) {
+          const mainTopic = filteredTopics[0];
+          const structure = sentenceStructures[Math.floor(Math.random() * sentenceStructures.length)];
+          introSentence = applySentenceStructure(structure, mainTopic, analysis);
+          usedPhrases.add(mainTopic);
+        } else if (sentenceStructures.length > 0) {
+          // Just adapt the first sentence if no topics
+          const structure = sentenceStructures[0];
+          introSentence = adaptSentence(structure, analysis);
+        } else {
+          // Extract a sentence from the original text as intro
+          introSentence = extractKey(sentences, 0, 0.3);
+        }
+      }
+      
+      // BODY: Extract key insights from different sections of the text to ensure variety
+      const keyInsights = extractDistinctInsights(sections, filteredTopics, usedPhrases);
+      
+      // Select insights for the body
+      const bodyCount = Math.max(1, sentenceCount - 2); // Adjust based on required sentence count
+      const bodyInsights = keyInsights.slice(0, bodyCount);
+      
+      // Create body sentences with varied structures
+      const bodySentences = bodyInsights.map(insight => {
+        // Assess confidence in this particular sentence
+        const confidence = assessTextConfidence(insight, analysis);
+        
+        // Higher confidence = preserve more of original text
+        if (confidence > 0.6) {
+          // Minimal rewriting for high-confidence text
+          return rewriteAdaptively(insight, analysis, filteredTopics, usedPhrases);
+        } else {
+          // More aggressive rewriting/generation for lower-confidence text
+          return generateDynamicSentence(insight, filteredTopics, usedPhrases, sentences, analysis);
+        }
+      });
+      
+      // CONCLUSION: Create a conclusion by adapting an actual concluding sentence
+      let conclusionSentence = "";
+      
+      // Try to find an actual concluding sentence
+      const concludingSentences = sentences.slice(-2);
+      const hasActualConclusion = concludingSentences.some(s => 
         s.match(/(?:in conclusion|to summarize|overall|ultimately|therefore|thus)/i)
       );
-      conclusionSentence = rewriteAdaptively(actualConclusion, analysis, topics, usedPhrases);
-    } else {
-      // Create a synthetic conclusion
-      const unusedTopics = topics.filter(t => !usedPhrases.has(t));
-      const concludingTopic = unusedTopics.length > 0 ? unusedTopics[0] : topics[0];
       
-      const conclusionPatterns = [
-        topic => `These developments highlight the ongoing importance of ${topic} in this field.`,
-        topic => `The implications of ${topic} extend across multiple domains and applications.`,
-        topic => `Understanding ${topic} provides valuable insights for future developments in this area.`,
-      ];
-      
-      const conclusionPattern = conclusionPatterns[Math.floor(Math.random() * conclusionPatterns.length)];
-      conclusionSentence = conclusionPattern(concludingTopic);
-    }
-    
-    // Combine all parts
-    const rawSummary = introSentence + ' ' + bodySentences.join(' ') + ' ' + conclusionSentence;
-    
-    // Final quality control check
-    return improveTextQuality(rawSummary);
-  }
-  
-  /**
-   * Segment text into meaningful sections rather than just sentences
-   */
-  function segmentIntoSections(sentences) {
-    if (sentences.length <= 3) return [sentences];
-    
-    const sections = [];
-    let currentSection = [];
-    
-    sentences.forEach((sentence, index) => {
-      // Add to current section
-      currentSection.push(sentence);
-      
-      // Check if this might be a section boundary
-      const lowerSentence = sentence.toLowerCase();
-      const nextSentence = index < sentences.length - 1 ? sentences[index + 1].toLowerCase() : "";
-      
-      const isSectionBoundary = 
-        // Current sentence ends a thought
-        sentence.endsWith('.') &&
-        // Next sentence starts a new thought or topic
-        (nextSentence.match(/^(moreover|furthermore|however|in addition|another|also|first|second|finally|lastly|importantly)/i) ||
-         // Current sentence seems to conclude a point
-         lowerSentence.match(/(?:therefore|thus|in conclusion|to summarize|consequently|as a result)/) ||
-         // We've accumulated several sentences in this section
-         currentSection.length >= 3);
-      
-      if (isSectionBoundary && currentSection.length > 0) {
-        sections.push([...currentSection]);
-        currentSection = [];
+      if (hasActualConclusion) {
+        // Use the actual conclusion from the text
+        const actualConclusion = concludingSentences.find(s => 
+          s.match(/(?:in conclusion|to summarize|overall|ultimately|therefore|thus)/i)
+        );
+        conclusionSentence = rewriteAdaptively(actualConclusion, analysis, filteredTopics, usedPhrases);
+      } else {
+        // Extract a potential conclusion sentence
+        const unused = filteredTopics.filter(t => !usedPhrases.has(t))[0] || "";
+        if (unused) {
+          // Create a conclusion using unused topic
+          const concludingStructures = extractSentenceStructures(sentences.slice(-3));
+          if (concludingStructures.length > 0) {
+            conclusionSentence = applySentenceStructure(
+              concludingStructures[Math.floor(Math.random() * concludingStructures.length)], 
+              unused, 
+              analysis
+            );
+          } else {
+            // Extract a sentence from the original text
+            conclusionSentence = extractKey(sentences, -1, 0.7);
+          }
+        } else {
+          // Extract a sentence from the original text
+          conclusionSentence = extractKey(sentences, -1, 0.7);
+        }
       }
-    });
-    
-    // Add any remaining sentences to the last section
-    if (currentSection.length > 0) {
-      sections.push(currentSection);
-    }
-    
-    return sections;
-  }
-  
-  /**
-   * Extract distinct insights from different sections of text
-   * avoiding repetition of the same ideas
-   */
-  function extractDistinctInsights(sections, topics, usedPhrases) {
-    const insights = [];
-    
-    // Go through each section to extract a key insight
-    sections.forEach(section => {
-      if (section.length === 0) return;
       
-      // Analyze each sentence in the section
-      const sectionInsights = section.map(sentence => {
-        // Skip sentences that mostly repeat already used phrases
-        if (containsAnyPhrase(sentence, Array.from(usedPhrases))) {
-          return { sentence, uniqueness: 0 };
+      // Combine all parts without unnecessary transitions
+      const rawSummary = introSentence + ' ' + bodySentences.join(' ') + ' ' + conclusionSentence;
+      
+      // Final quality control check
+      return improveTextQuality(rawSummary);
+    }
+  
+    /**
+     * Extract sentence structures from example sentences
+     */
+    function extractSentenceStructures(sentences) {
+      const structures = [];
+      sentences.forEach(sentence => {
+        const tokens = sentence.split(/\s+/);
+        
+        // Only use sentences with reasonable length
+        if (tokens.length < 5 || tokens.length > 15) return;
+        
+        // Create a generic structure
+        const structure = {
+          original: sentence,
+          verbs: [],
+          prepositions: [],
+          firstWord: tokens[0].toLowerCase()
+        };
+        
+        // Extract verbs
+        for (let i = 0; i < tokens.length; i++) {
+          const token = tokens[i].toLowerCase();
+          if (token.match(/\b(?:is|are|was|discuss|highlight|show|reveal|present|describe|examine)\w*\b/)) {
+            structure.verbs.push({word: token, position: i});
+          }
+          if (token.match(/\b(?:in|on|to|for|from|with|by|about|through)\b/)) {
+            structure.prepositions.push({word: token, position: i});
+          }
         }
         
-        // Calculate how many unique topics this sentence covers
-        const uniqueTopicsMentioned = topics.filter(topic => 
-          sentence.toLowerCase().includes(topic.toLowerCase()) && 
-          !usedPhrases.has(topic)
-        );
-        
-        // Prefer sentences with themes not yet covered
-        return { 
-          sentence, 
-          uniqueness: uniqueTopicsMentioned.length,
-          topics: uniqueTopicsMentioned
-        };
+        // Only add structures with at least one verb
+        if (structure.verbs.length > 0) {
+          structures.push(structure);
+        }
       });
       
-      // Get the most insightful sentence from this section
-      const bestInsight = sectionInsights.sort((a, b) => b.uniqueness - a.uniqueness)[0];
-      
-      if (bestInsight && bestInsight.uniqueness > 0) {
-        insights.push(bestInsight);
-        
-        // Mark these topics as used
-        bestInsight.topics.forEach(topic => usedPhrases.add(topic));
-      } else if (section.length > 0) {
-        // If no uniquely insightful sentence, just use the first one from this section
-        insights.push({ sentence: section[0], uniqueness: 0, topics: [] });
-      }
-    });
-    
-    return insights.map(insight => insight.sentence);
-  }
+      return structures;
+    }
   
-  /**
-   * Generate a sentence that doesn't repeat already used content
-   */
-  function generateNonRepetitiveSentence(baseSentence, topics, usedPhrases) {
-    // If sentence repeats many used phrases, do more aggressive rewriting
-    if (containsAnyPhrase(baseSentence, Array.from(usedPhrases), 2)) {
-      // Find topics not yet covered
+    /**
+     * Apply a sentence structure to create a new sentence
+     */
+    function applySentenceStructure(structure, topic, analysis) {
+      const verb = structure.verbs[0];
+      const preposition = structure.prepositions[0];
+      
+      // Use a relevant verb from the analysis
+      const analysisVerbs = analysis.actionVerbs || [];
+      const relevantVerb = analysisVerbs.length > 0 ? 
+        analysisVerbs[Math.floor(Math.random() * analysisVerbs.length)] : 
+        verb ? verb.word : "discusses";
+      
+      // Construct a new sentence based on the structure
+      let newSentence;
+      
+      // Adapt based on structure
+      if (structure.firstWord.match(/^(?:this|the|these|those)$/)) {
+        // For sentences starting with determiners, create a statement about the topic
+        if (structure.verbs.length > 0 && structure.verbs[0].position < 3) {
+          // The X is/discusses...
+          newSentence = `${capitalizeFirstLetter(topic)} ${conjugateVerb(relevantVerb)} key information presented.`;
+        } else {
+          // The X in the Y...
+          newSentence = `${capitalizeFirstLetter(topic)} ${preposition ? preposition.word : 'in'} this context provides important insights.`;
+        }
+      } else if (structure.verbs.length > 1) {
+        // For multi-verb structures, create a more complex sentence
+        newSentence = `${capitalizeFirstLetter(topic)} ${conjugateVerb(relevantVerb)} how information can be effectively processed.`;
+      } else {
+        // Default structure
+        newSentence = `${capitalizeFirstLetter(topic)} ${conjugateVerb(relevantVerb)} concepts from various perspectives.`;
+      }
+      
+      return cleanText(newSentence);
+    }
+  
+    /**
+     * Adapt a sentence based on analysis
+     */
+    function adaptSentence(structure, analysis) {
+      // Get a relevant action verb from analysis
+      const verbs = analysis.actionVerbs || [];
+      const verb = verbs.length > 0 ? verbs[Math.floor(Math.random() * verbs.length)] : "presents";
+      
+      // Get a relevant topic
+      const topics = analysis.keyTopics || [];
+      const topic = topics.length > 0 ? topics[0] : "information";
+      
+      // Create an adapted sentence
+      return `${capitalizeFirstLetter(topic)} ${conjugateVerb(verb)} important concepts in context.`;
+    }
+  
+    /**
+     * Extract a key sentence from the original text
+     */
+    function extractKey(sentences, position, confidence = 0.5) {
+      if (!sentences || sentences.length === 0) {
+        return "Information is presented with context and detail.";
+      }
+      
+      // Position can be negative (from the end) or positive (from the start)
+      const idx = position < 0 ? Math.max(0, sentences.length + position) : Math.min(position, sentences.length - 1);
+      
+      // Get the actual sentence
+      let sentence = sentences[idx];
+      
+      // Clean up the sentence
+      return rewriteAdaptively(sentence, {}, [], new Set(), confidence);
+    }
+  
+    /**
+     * Generate a dynamic sentence without fixed templates
+     */
+    function generateDynamicSentence(baseSentence, topics, usedPhrases, originalSentences, analysis) {
+      // Check if there's an unused topic
       const unusedTopics = topics.filter(t => !usedPhrases.has(t));
       
       if (unusedTopics.length > 0) {
-        // Create a sentence focusing on an unused topic
         const topic = unusedTopics[0];
         usedPhrases.add(topic);
         
-        const patterns = [
-          t => `${capitalizeFirstLetter(t)} facilitates more effective information processing.`,
-          t => `The concept of ${t} addresses key challenges in this context.`,
-          t => `Advancements in ${t} continue to shape this field.`
-        ];
+        // Get sentence structures from original
+        const structures = extractSentenceStructures(originalSentences.slice(0, 5));
+        if (structures.length > 0) {
+          // Apply a random structure
+          return applySentenceStructure(
+            structures[Math.floor(Math.random() * structures.length)],
+            topic,
+            analysis
+          );
+        }
         
-        return patterns[Math.floor(Math.random() * patterns.length)](topic);
+        // Extract verb from analysis or base sentence
+        const verbMatch = baseSentence.match(/\b(?:is|are|shows|presents|discusses|describes|reveals|provides|addresses)\b/i);
+        const verb = verbMatch ? verbMatch[0].toLowerCase() : 
+          (analysis.actionVerbs && analysis.actionVerbs.length > 0) ? 
+            analysis.actionVerbs[0] : "relates to";
+        
+        // Create a new sentence
+        return cleanText(`${capitalizeFirstLetter(topic)} ${verb} key concepts in this content.`);
       }
+      
+      // If no unused topics, just rewrite the base sentence
+      return rewriteAdaptively(baseSentence, {}, topics, usedPhrases);
     }
-    
-    // For less repetitive content, just clean up and rephrase slightly
-    return rewriteAdaptively(baseSentence, {}, topics, usedPhrases);
-  }
   
-  /**
-   * Check if text contains any of the specified phrases
-   */
-  function containsAnyPhrase(text, phrases, threshold = 1) {
-    const lowerText = text.toLowerCase();
-    let matches = 0;
-    
-    for (const phrase of phrases) {
-      if (phrase && phrase.length > 3 && lowerText.includes(phrase.toLowerCase())) {
-        matches++;
-        if (matches >= threshold) return true;
-      }
+    /**
+     * Simple conjugation for a subset of verbs
+     */
+    function conjugateVerb(verb) {
+      const presentTense = {
+        'discuss': 'discusses',
+        'show': 'shows',
+        'reveal': 'reveals',
+        'present': 'presents',
+        'describe': 'describes',
+        'examine': 'examines',
+        'provide': 'provides',
+        'address': 'addresses',
+        'highlight': 'highlights',
+        'demonstrate': 'demonstrates',
+        'explain': 'explains',
+        'explore': 'explores',
+        'analyze': 'analyzes'
+      };
+      
+      return presentTense[verb] || `${verb}s`;
     }
-    
-    return false;
-  }
   
-  /**
-   * Adaptively rewrite a sentence to avoid repetition and improve quality
-   */
-  function rewriteAdaptively(sentence, analysis = {}, topics = [], usedPhrases = new Set()) {
-    let result = sentence;
-    
-    // Remove filler phrases
-    const fillerPhrases = [
-      'it is important to note that', 'it should be noted that', 'it is worth noting that',
-      'in other words', 'as you can see', 'as a matter of fact'
-    ];
-    
-    fillerPhrases.forEach(phrase => {
-      result = result.replace(new RegExp(phrase, 'gi'), '');
-    });
-    
-    // Avoid starting sentences with "This text" repeatedly
-    if (result.match(/^(This text|The text)\s+(?:analyze|analyzes|discuss|discusses|describe|describes)/i)) {
-      // Replace with a more varied sentence starter
-      const starters = [
-        "The content highlights how",
-        "The document explains that",
-        "The analysis shows that",
-        "The discussion reveals that"
-      ];
-      result = result.replace(/^(This text|The text)\s+(?:analyze|analyzes|discuss|discusses|describe|describes)/i, 
-        starters[Math.floor(Math.random() * starters.length)]);
-    }
-    
-    // Fix grammar issues ("analyze" → "analyzes")
-    result = result.replace(/\b(text|content|document|analysis)\s+analyze\b/i, '$1 analyzes');
-    
-    // Fix spacing and punctuation
-    result = result.replace(/\s+/g, ' ').trim();
-    result = result.replace(/\s+([,.;:])/g, '$1');
-    
-    // Ensure proper capitalization
-    if (result.length > 0) {
+    /**
+     * Clean text by fixing spacing, punctuation, etc.
+     */
+    function cleanText(text) {
+      if (!text) return "";
+      
+      // Fix spacing issues
+      let result = text.replace(/\s+/g, ' ').trim();
+      result = result.replace(/\s+([,.;:])/g, '$1');
+      
+      // Ensure proper capitalization
       result = result.charAt(0).toUpperCase() + result.slice(1);
-    }
-    
-    // Ensure the sentence ends with proper punctuation
-    if (!result.match(/[.!?]$/)) {
-      result += '.';
-    }
-    
-    return result;
-  }
-  
-  /**
-   * Final quality improvement pass to catch any remaining issues
-   */
-  function improveTextQuality(text) {
-    // Split into sentences
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
-    if (sentences.length <= 1) return text;
-    
-    // Check for near-duplicate sentences and rewrite them
-    const uniqueSentences = [];
-    const seenSentenceKeys = new Set();
-    
-    sentences.forEach(sentence => {
-      // Create a simplified key for similarity checking
-      const key = sentence
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, ' ')
-        .split(/\s+/)
-        .filter(w => w.length > 3) // Only compare significant words
-        .slice(0, 5) // Just use the first few words
-        .join(' ');
       
-      // If we've seen a very similar sentence, create a variation
-      if (key.length > 10 && seenSentenceKeys.has(key)) {
-        // Sentence is too similar to one we've already included
-        // Try a different sentence structure
-        if (sentence.match(/^This|The/)) {
-          // Change from "This/The X" to an active phrasing
-          const simpleSentence = sentence
-            .replace(/^(This|The)\s+[^.!?]+?(is|are|has|have|can|will|may)/i, 'It $2')
-            .replace(/^(This|The)\s+[^.!?]+?(analyze|discusses|describes|shows|presents|highlights)/i, 'We see that it $2');
-          
-          uniqueSentences.push(simpleSentence);
-        } else {
-          // Just keep one instance of this sentence pattern
-          // Don't add it again
-        }
-      } else if (key.length > 0) {
-        // It's a unique enough sentence
-        seenSentenceKeys.add(key);
-        uniqueSentences.push(sentence);
+      // Ensure sentence ends with punctuation
+      if (!result.match(/[.!?]$/)) {
+        result += '.';
       }
-    });
-    
-    // Add transition words for better flow
-    const result = [];
-    uniqueSentences.forEach((sentence, i) => {
-      if (i === 0) {
-        result.push(sentence);
+      
+      return result;
+    }
+  
+    /**
+     * Generate a biography-focused adaptive summary
+     */
+    function generateAdaptiveBiography(sentences, analysis) {
+      // Track used phrases to avoid repetition
+      const usedPhrases = new Set();
+      const preservedEntities = new Set();
+      
+      // Add entities to preserved set to ensure they're not fragmented
+      if (analysis.mainEntities && analysis.mainEntities.length > 0) {
+        analysis.mainEntities.forEach(entity => preservedEntities.add(entity));
+      }
+      
+      // Identify the main person (usually the first entity)
+      const mainPerson = analysis.mainEntities && analysis.mainEntities.length > 0 ? 
+        analysis.mainEntities[0] : null;
+      
+      if (!mainPerson) {
+        // Fallback to general summary if no main person is identified
+        return generateAdaptiveSummary(sentences, analysis, [], 3);
+      }
+      
+      // Create biography intro using sentence structure extraction
+      const introSentences = sentences.slice(0, Math.min(3, sentences.length));
+      const introStructures = extractSentenceStructures(introSentences);
+      
+      // Generate an intro focused on the person without templates
+      let introSentence;
+      if (introStructures.length > 0) {
+        // Use existing sentence structure
+        const structure = introStructures[Math.floor(Math.random() * introStructures.length)];
+        const verb = (analysis.actionVerbs && analysis.actionVerbs.length > 0) ? 
+          analysis.actionVerbs[0] : "presents";
+        introSentence = `${mainPerson} ${conjugateVerb(verb)} important contributions in this context.`;
       } else {
-        // Add varied transitions that fit the content relationship
-        const transitions = [
-          'Additionally,', 'Furthermore,', 'Moreover,', 
-          'In this context,', 'Beyond this,', 'Building on this idea,'
-        ];
+        // Extract a relevant sentence from original text
+        const personSentences = sentences.filter(s => s.includes(mainPerson));
+        introSentence = personSentences.length > 0 ? 
+          rewriteAdaptively(personSentences[0], analysis, [], usedPhrases, 0.7) : 
+          `${mainPerson} is examined in this biographical content.`;
+      }
+      
+      // Mark person as used
+      usedPhrases.add(mainPerson);
+      
+      // Find key biographical sentences
+      const keyBioSentences = [];
+      sentences.forEach(sentence => {
+        // Check if sentence contains main person or variants
+        const nameParts = mainPerson.split(/\s+/);
+        const lastName = nameParts[nameParts.length - 1];
+        const containsName = sentence.includes(mainPerson) || 
+                           (lastName.length > 2 && sentence.includes(lastName));
         
-        // Simple heuristic to avoid too many of the same transition
-        const transition = transitions[i % transitions.length];
+        // Check for biographical indicators
+        const hasBioIndicator = /\b(?:born|life|career|work|achievement|position|led|elected|served)\b/i.test(sentence);
         
-        // Add transition word/phrase
-        const sentenceStart = sentence.charAt(0).toLowerCase() + sentence.slice(1);
-        result.push(`${transition} ${sentenceStart}`);
-      }
-    });
-    
-    return result.join(' ');
-  }
-  
-  /**
-   * Simple helper to capitalize the first letter of a string
-   */
-  function capitalizeFirstLetter(string) {
-    if (!string) return '';
-    return string.charAt(0).toUpperCase() + string.slice(1);
-  }
-  
-  return {
-    /**
-     * Generate a summary using appropriate prompt based on content type
-     */
-    async generateSummary(text, options = {}) {
-      // Detect content type to choose appropriate prompt
-      const contentType = options.contentType || detectContentType(text);
+        // Score the sentence based on biographical relevance
+        let score = 0;
+        if (containsName) score += 2;
+        if (hasBioIndicator) score += 1;
+        
+        if (score >= 2) {
+          keyBioSentences.push(sentence);
+        }
+      });
       
-      // Select appropriate prompt template
-      let promptTemplate;
-      switch (contentType) {
-        case "biographical":
-          promptTemplate = PROMPT_TEMPLATES.summarize.biographical;
-          break;
-        case "academic":
-          promptTemplate = PROMPT_TEMPLATES.summarize.formal;
-          break;
-        case "technical":
-          promptTemplate = PROMPT_TEMPLATES.summarize.explanatory;
-          break;
-        default:
-          promptTemplate = PROMPT_TEMPLATES.summarize.basic;
-      }
+      // Select key biographical sentences
+      const bodySentences = keyBioSentences
+        .slice(0, Math.min(2, keyBioSentences.length))
+        .map(sentence => rewriteAdaptively(sentence, analysis, [], usedPhrases, 0.7));
       
-      // Generate prompt and process with LLM
-      const prompt = promptTemplate(text);
-      const summary = await processWithLLM(prompt, options);
-      return summary;
-    },
-    
-    /**
-     * Enhance a summary using the provided key elements
-     */
-    async enhanceSummary(summary, keyElements, options = {}) {
-      // Choose enhancement approach based on available elements
-      let promptTemplate;
-      let elements;
+      // Create concluding sentence by adapting from original text
+      let conclusionSentence;
+      const concludingSentences = sentences.slice(-2);
+      const relevantConclusion = concludingSentences.find(s => s.includes(mainPerson) || s.includes(nameParts[nameParts.length - 1]));
       
-      if (keyElements.themes && keyElements.themes.length > 0) {
-        promptTemplate = PROMPT_TEMPLATES.enhance.withThemes;
-        elements = keyElements.themes.slice(0, 5).map(t => typeof t === 'string' ? t : t.text);
-      }
-      else if (keyElements.entities && keyElements.entities.length > 0) {
-        promptTemplate = PROMPT_TEMPLATES.enhance.withEntities;
-        elements = keyElements.entities.slice(0, 5).map(e => typeof e === 'string' ? e : e.text);
-      }
-      else {
-        // If no specific elements, choose based on content type
-        if (options.contentType === "academic") {
-          promptTemplate = PROMPT_TEMPLATES.enhance.academic;
-          return await processWithLLM(promptTemplate(summary), options);
+      if (relevantConclusion) {
+        conclusionSentence = rewriteAdaptively(relevantConclusion, analysis, [], usedPhrases, 0.7);
+      } else {
+        // Find any sentence about impacts, contributions, or importance
+        const impactSentences = sentences.filter(s => 
+          /\b(?:impact|influence|contribution|important|significant|legacy)\b/i.test(s)
+        );
+        
+        if (impactSentences.length > 0) {
+          const impactSentence = impactSentences[Math.floor(Math.random() * impactSentences.length)];
+          conclusionSentence = rewriteAdaptively(impactSentence, analysis, [], usedPhrases, 0.7);
+          
+          // Ensure the person is mentioned
+          if (!conclusionSentence.includes(mainPerson)) {
+            conclusionSentence = `${mainPerson}'s ${conclusionSentence.charAt(0).toLowerCase()}${conclusionSentence.slice(1)}`;
+          }
         } else {
-          promptTemplate = PROMPT_TEMPLATES.enhance.simplified;
-          return await processWithLLM(promptTemplate(summary), options);
+          // Extract a closing sentence
+          conclusionSentence = extractKey(sentences, -1, 0.8);
         }
       }
       
-      // Generate prompt with elements and process
-      const prompt = promptTemplate(summary, elements);
-      return await processWithLLM(prompt, options);
-    },
-    
-    /**
-     * Analyze content to identify its type and structure
-     */
-    analyzeContent(text) {
+      // Combine all parts
+      const rawSummary = [introSentence, ...bodySentences, conclusionSentence].join(' ');
+      
+      // Final quality control check
+      return improveTextQuality(rawSummary);
+    }
+  
+    /* ---------------- LLM Simulation ---------------- */
+  
+    async function processWithLLM(prompt, options = {}) {
+      console.log("Processing with simulated LLM:", prompt.substring(0, 100) + "...");
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const inputText = prompt.includes("Summary:")
+        ? prompt.split("Summary:")[1]
+        : prompt.split("\n\n")[1] || prompt;
+      const requestedSentenceCount = options.sentenceCount || 3;
+      const sentences = inputText.match(/[^.!?]+[.!?]+/g) || [];
+      if (!sentences.length) return inputText;
+      const analysisResult = analyzeTextForSummarization(inputText, sentences);
+      const contentType = options.contentType || detectContentType(inputText);
+      if (prompt.includes("themes:") || prompt.includes("incorporating these key themes")) {
+        const themesMatch = prompt.match(/themes:\s*([^.\n]+)/);
+        const themes = themesMatch
+          ? themesMatch[1].split(",").map(t => t.trim())
+          : analysisResult.keyTopics;
+        return generateAdaptiveSummary(sentences, analysisResult, themes, requestedSentenceCount);
+      } else if (contentType === "biographical") {
+        return generateAdaptiveBiography(sentences, analysisResult);
+      } else {
+        return generateAdaptiveSummary(sentences, analysisResult, [], requestedSentenceCount);
+      }
+    }
+  
+    function detectContentType(text) {
+      const complexNamePattern = /\b[A-Z][a-zÀ-ÿ]+(?:\s+(?:[A-Z][a-zÀ-ÿ]+|d[aeo]\s+[A-Z][a-zÀ-ÿ]+|d[aeo]|van|von|del|la))+\b/g;
+      const complexNames = text.match(complexNamePattern) || [];
+      const namePattern = /\b[A-Z][a-zÀ-ÿ]+(?:\s+[A-Z][a-zÀ-ÿ]+){1,3}\b/g;
+      const standardNames = text.match(namePattern) || [];
+      const allNames = [...new Set([...complexNames, ...standardNames])];
+      const bioIndicators = ["born", "died", "career", "life", "biography"];
+      const hasBioIndicators = bioIndicators.some(i => text.toLowerCase().includes(i));
+      if (
+        (allNames.length > 0 &&
+          allNames.some(name => {
+            const nameParts = name.split(/\s+/);
+            const lastName = nameParts[nameParts.length - 1];
+            // Fix regex syntax error and remove backticks
+            const fullNameCount = (text.match(new RegExp(`\\b${name.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&`)}\\b`, "g")) || []).length;
+            const lastNameCount = lastName.length > 2 ? (text.match(new RegExp(`\\b${lastName.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&`)}\\b`, "g")) || []).length : 0;
+            return fullNameCount + lastNameCount >= 3;
+          })) &&
+        hasBioIndicators
+      ) {
+        return "biographical";
+      }
+      const technicalWords = ["data", "algorithm", "system", "technology", "software"];
+      const technicalCount = technicalWords.reduce(
+        (cnt, word) => cnt + ((text.toLowerCase().match(new RegExp(`\\b${word}\\w*\\b`, "g")) || []).length),
+        0
+      );
+      if (technicalCount > 3) return "technical";
+      const academicWords = ["research", "study", "analysis", "literature"];
+      const academicCount = academicWords.reduce(
+        (cnt, word) => cnt + ((text.toLowerCase().match(new RegExp(`\\b${word}\\w*\\b`, "g")) || []).length),
+        0
+      );
+      if (academicCount > 3) return "academic";
+      return "general";
+    }
+  
+    function analyzeContent(text) {
       const contentType = detectContentType(text);
       return {
         contentType,
-        estimatedReadingTime: Math.ceil(text.split(/\s+/).length / 200), // words per minute
-        complexity: contentType === "technical" || contentType === "academic" ? "high" : "moderate"
+        estimatedReadingTime: Math.ceil(text.split(/\s+/).length / 200),
+        complexity: contentType === "technical" || contentType === "academic" ? "high" : "moderate",
       };
     }
-  };
-})();
+  
+    /* ---------------- Public API ---------------- */
+    return {
+      async generateSummary(text, options = {}) {
+        const contentType = options.contentType || detectContentType(text);
+        let promptTemplate;
+        switch (contentType) {
+          case "biographical":
+            promptTemplate = PROMPT_TEMPLATES.summarize.biographical;
+            break;
+          case "academic":
+            promptTemplate = PROMPT_TEMPLATES.summarize.formal;
+            break;
+          case "technical":
+            promptTemplate = PROMPT_TEMPLATES.summarize.explanatory;
+            break;
+          default:
+            promptTemplate = PROMPT_TEMPLATES.summarize.basic;
+        }
+        const prompt = promptTemplate(text);
+        return await processWithLLM(prompt, options);
+      },
+  
+      async enhanceSummary(summary, keyElements, options = {}) {
+        let promptTemplate;
+        let elements;
+        if (keyElements.themes && keyElements.themes.length > 0) {
+          promptTemplate = PROMPT_TEMPLATES.enhance.withThemes;
+          elements = keyElements.themes.slice(0, 5).map(t => (typeof t === "string" ? t : t.text));
+        } else if (keyElements.entities && keyElements.entities.length > 0) {
+          promptTemplate = PROMPT_TEMPLATES.enhance.withEntities;
+          elements = keyElements.entities.slice(0, 5).map(e => (typeof e === "string" ? e : e.text));
+        } else {
+          if (options.contentType === "academic") {
+            promptTemplate = PROMPT_TEMPLATES.enhance.academic;
+            return await processWithLLM(promptTemplate(summary), options);
+          } else {
+            promptTemplate = PROMPT_TEMPLATES.enhance.simplified;
+            return await processWithLLM(promptTemplate(summary), options);
+          }
+        }
+        const prompt = promptTemplate(summary, elements);
+        return await processWithLLM(prompt, options);
+      },
+  
+      analyzeContent,
+      detectContentType,
+    };
+  })();
