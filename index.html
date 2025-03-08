@@ -3,140 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <title>ML Text Summarizer</title>
-  <style>
-    /* General styles */
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      max-width: 800px;
-      margin: 20px auto;
-      padding: 0 20px;
-      color: #333;
-      line-height: 1.6;
-    }
-    
-    /* Text areas */
-    textarea {
-      width: 100%;
-      box-sizing: border-box;
-      font-size: 14px;
-      padding: 12px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-family: inherit;
-      resize: vertical;
-      transition: border-color 0.3s;
-    }
-    
-    textarea:focus {
-      outline: none;
-      border-color: #4285f4;
-    }
-    
-    #inputText {
-      height: 200px;
-      margin-bottom: 10px;
-    }
-    
-    #outputSummary {
-      height: 150px;
-      background-color: #f9f9f9;
-    }
-    
-    /* Button styles */
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      cursor: pointer;
-      background-color: #4285f4;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      transition: background-color 0.2s;
-    }
-    
-    button:hover {
-      background-color: #3b78e7;
-    }
-    
-    button:disabled {
-      background-color: #cccccc;
-      cursor: not-allowed;
-    }
-    
-    /* Status and controls */
-    #status {
-      margin: 10px 0;
-      font-style: italic;
-      color: #666;
-    }
-    
-    .controls {
-      margin: 15px 0;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    
-    /* Header and settings */
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-    
-    .settings {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-    
-    input[type="number"] {
-      width: 50px;
-      padding: 5px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-    }
-    
-    /* Additional styles for ML interface */
-    .model-status {
-      background-color: #f0f7ff;
-      padding: 10px;
-      border-radius: 4px;
-      margin-bottom: 15px;
-      border-left: 4px solid #4285f4;
-    }
-    
-    .progress-container {
-      width: 100%;
-      background-color: #f1f1f1;
-      border-radius: 3px;
-      margin-top: 10px;
-    }
-    
-    .progress-bar {
-      height: 10px;
-      background-color: #4285f4;
-      width: 0%;
-      border-radius: 3px;
-      transition: width 0.3s;
-    }
-    
-    .method-selector {
-      margin-bottom: 15px;
-    }
-    
-    .model-selector {
-      margin-left: 10px;
-      padding: 5px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-    }
-  </style>
+  <link rel="stylesheet" href="css/styles.css">
   <!-- Load TensorFlow.js -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0"></script>
   <!-- Load Universal Sentence Encoder -->
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/universal-sentence-encoder"></script>
+  <!-- MobileBERT for TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/qna"></script>
+  <!-- Additional model libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/bert"></script>
+  
+  <!-- Load application scripts in the correct order -->
+  <script src="js/utils/tf-models.js"></script>
+  <script src="js/utils/text-summarizer.js"></script>
+  <script src="js/utils/key-elements-extractor.js"></script>
+  <script src="js/models/model-registry.js"></script>
+  <script src="js/models/ml-summarizer.js"></script>
+  <script src="js/generators/summary-generator.js"></script>
+  <script src="js/ui/ui-controller.js"></script>
+  <script src="js/app.js"></script>
 </head>
 <body>
   <div class="header">
@@ -147,12 +32,18 @@
     </div>
   </div>
   
-  <div class="method-selector">
-    <label for="summaryMethod">Method:</label>
-    <select id="summaryMethod" class="model-selector">
-      <option value="extractive">Extractive (TensorFlow.js)</option>
-      <option value="local">Local Processing (Fast)</option>
+  <div class="model-selector-container">
+    <label for="modelSelect">Summarization Model:</label>
+    <select id="modelSelect" class="model-selector">
+      <option value="use">Universal Sentence Encoder</option>
+      <option value="mobilebert">MobileBERT (Compact)</option>
+      <option value="tinybert">TinyBERT (Fastest)</option>
+      <option value="local">Statistical (No Download)</option>
     </select>
+  </div>
+  
+  <div id="modelInfoPanel" class="model-info-panel">
+    <!-- Dynamic model information will be displayed here -->
   </div>
   
   <div class="model-status" id="modelStatus">
@@ -170,423 +61,35 @@
   </div>
   
   <div id="status">Ready to summarize</div>
-  <h2>Summary</h2>
-  <textarea id="outputSummary" readonly></textarea>
-
-  <script>
-    /**
-     * ML Summarizer - Uses TensorFlow.js with Universal Sentence Encoder
-     * This implements an extractive summarization approach using semantic similarity
-     */
-    const MLSummarizer = (() => {
-      let model = null;
-      let isLoading = false;
-      
-      // Update loading progress bar
-      function updateProgress(percent) {
-        document.getElementById('loadingProgress').style.width = `${percent}%`;
-      }
-      
-      // Update model status message
-      function updateModelStatus(message) {
-        const statusDiv = document.querySelector('#modelStatus div:first-child');
-        statusDiv.textContent = `Model status: ${message}`;
-      }
-      
-      // Load the Universal Sentence Encoder model
-      async function loadModel() {
-        if (model) return model;
-        if (isLoading) return null;
-        
-        isLoading = true;
-        updateModelStatus("Loading USE model...");
-        updateProgress(10);
-        
-        try {
-          // Configure model loading
-          tf.env().set('WEBGL_PACK', false); // For better compatibility
-          
-          // Progressively load the model
-          model = await use.load();
-          
-          updateProgress(100);
-          updateModelStatus("Model loaded and ready");
-          
-          return model;
-        } catch (error) {
-          console.error("Error loading model:", error);
-          updateModelStatus(`Error: ${error.message}`);
-          updateProgress(0);
-          return null;
-        } finally {
-          isLoading = false;
-        }
-      }
-      
-      // Calculate cosine similarity between two vectors
-      function cosineSimilarity(vecA, vecB) {
-        return tf.tidy(() => {
-          const dotProduct = tf.sum(tf.mul(vecA, vecB));
-          const normA = tf.norm(vecA);
-          const normB = tf.norm(vecB);
-          return dotProduct.div(tf.mul(normA, normB));
-        });
-      }
-      
-      // Private methods
-      function splitIntoSentences(text) {
-        return text
-          .replace(/([.!?])\s+(?=[A-Z])/g, "$1|")
-          .replace(/\n+/g, "|")
-          .split("|")
-          .map(s => s.trim())
-          .filter(s => s.length > 10);
-      }
-      
-      // Public API
-      return {
-        async isModelAvailable() {
-          if (model) return true;
-          try {
-            await loadModel();
-            return !!model;
-          } catch (e) {
-            return false;
-          }
-        },
-        
-        async summarize(text, numSentences = 3) {
-          // Step 1: Split text into sentences
-          const sentences = splitIntoSentences(text);
-          
-          if (sentences.length <= numSentences) {
-            return text;  // Text already short enough
-          }
-          
-          // Step 2: Ensure model is loaded
-          if (!model) {
-            updateProgress(30);
-            model = await loadModel();
-            if (!model) {
-              throw new Error("Failed to load the ML model. Try again or switch to local processing.");
-            }
-          }
-          
-          updateModelStatus("Encoding sentences...");
-          updateProgress(50);
-          
-          // Step 3: Embed all sentences using Universal Sentence Encoder
-          const embeddings = await model.embed(sentences);
-          const sentenceVectors = await embeddings.array();
-          
-          updateModelStatus("Computing similarities...");
-          updateProgress(70);
-          
-          // Step 4: Compute similarity matrix
-          const similarityMatrix = [];
-          for (let i = 0; i < sentences.length; i++) {
-            similarityMatrix[i] = [];
-            for (let j = 0; j < sentences.length; j++) {
-              if (i === j) {
-                similarityMatrix[i][j] = 1.0; // Self-similarity
-              } else {
-                // Use TensorFlow.js to compute cosine similarity
-                const similarity = await cosineSimilarity(
-                  tf.tensor1d(sentenceVectors[i]), 
-                  tf.tensor1d(sentenceVectors[j])
-                ).array();
-                
-                similarityMatrix[i][j] = similarity;
-              }
-            }
-          }
-          
-          updateModelStatus("Ranking sentences...");
-          updateProgress(90);
-          
-          // Step 5: Apply TextRank algorithm
-          const ITERATIONS = 10;
-          const DAMPING = 0.85;
-          let scores = Array(sentences.length).fill(1);
-          
-          for (let iter = 0; iter < ITERATIONS; iter++) {
-            const newScores = Array(sentences.length).fill(0);
-            
-            for (let i = 0; i < sentences.length; i++) {
-              for (let j = 0; j < sentences.length; j++) {
-                if (i !== j) {
-                  const weight = similarityMatrix[j][i];
-                  newScores[i] += weight * scores[j];
-                }
-              }
-              newScores[i] = (1 - DAMPING) + DAMPING * newScores[i];
-            }
-            
-            scores = [...newScores];
-          }
-          
-          updateModelStatus("Finalizing summary...");
-          updateProgress(95);
-          
-          // Step 6: Select top sentences while preserving order
-          const topSentences = sentences
-            .map((sentence, index) => ({ sentence, score: scores[index], index }))
-            .sort((a, b) => b.score - a.score)
-            .slice(0, numSentences)
-            .sort((a, b) => a.index - b.index)
-            .map(item => item.sentence);
-            
-          updateModelStatus("Ready for next summary");
-          updateProgress(100);
-          
-          return topSentences.join(' ');
-        }
-      };
-    })();
-    
-    /**
-     * TextSummarizer - Core local summarization module (fallback)
-     */
-    const TextSummarizer = (() => {
-      // Private constants
-      const STOPWORDS = new Set([
-        'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 
-        'any', 'are', 'aren\'t', 'as', 'at', 'be', 'because', 'been', 'before', 'being', 
-        'below', 'between', 'both', 'but', 'by', 'can\'t', 'cannot', 'could', 'couldn\'t', 
-        'did', 'didn\'t', 'do', 'does', 'doesn\'t', 'doing', 'don\'t', 'down', 'during', 
-        'each', 'few', 'for', 'from', 'further', 'had', 'hadn\'t', 'has', 'hasn\'t', 'have', 
-        'haven\'t', 'having', 'he', 'he\'d', 'he\'ll', 'he\'s', 'her', 'here', 'here\'s', 
-        'hers', 'herself', 'him', 'himself', 'his', 'how', 'how\'s', 'i', 'i\'d', 'i\'ll', 
-        'i\'m', 'i\'ve', 'if', 'in', 'into', 'is', 'isn\'t', 'it', 'it\'s', 'its', 'itself', 
-        'let\'s', 'me', 'more', 'most', 'mustn\'t', 'my', 'myself', 'no', 'nor', 'not', 'of', 
-        'off', 'on', 'once', 'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 
-        'over', 'own', 'same', 'shan\'t', 'she', 'she\'d', 'she\'ll', 'she\'s', 'should', 
-        'shouldn\'t', 'so', 'some', 'such', 'than', 'that', 'that\'s', 'the', 'their', 'theirs', 
-        'them', 'themselves', 'then', 'there', 'there\'s', 'these', 'they', 'they\'d', 'they\'ll', 
-        'they\'re', 'they\'ve', 'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up', 
-        'very', 'was', 'wasn\'t', 'we', 'we\'d', 'we\'ll', 'we\'re', 'we\'ve', 'were', 'weren\'t', 
-        'what', 'what\'s', 'when', 'when\'s', 'where', 'where\'s', 'which', 'while', 'who', 
-        'who\'s', 'whom', 'why', 'why\'s', 'with', 'won\'t', 'would', 'wouldn\'t', 'you', 
-        'you\'d', 'you\'ll', 'you\'re', 'you\'ve', 'your', 'yours', 'yourself', 'yourselves'
-      ]);
-      
-      const ITERATIONS = 10;
-      const DAMPING = 0.85;
-      
-      // Private methods - use the existing code
-      function splitIntoSentences(text) {
-        return text
-          .replace(/([.!?])\s+(?=[A-Z])/g, "$1|")
-          .replace(/\n+/g, "|")
-          .split("|")
-          .map(s => s.trim())
-          .filter(s => s.length > 10);
-      }
-      
-      function preprocess(sentence) {
-        return sentence
-          .toLowerCase()
-          .replace(/[^\w\s]|_/g, "")
-          .split(/\s+/)
-          .filter(word => word.length > 1 && !STOPWORDS.has(word));
-      }
-      
-      function calculateSimilarity(words1, words2) {
-        if (words1.length === 0 || words2.length === 0) return 0;
-        
-        // Use Sets for faster intersection calculation
-        const set1 = new Set(words1);
-        const set2 = new Set(words2);
-        
-        // Calculate intersection size
-        const intersection = new Set([...set1].filter(x => set2.has(x)));
-        
-        // Normalize by the log of the product of set sizes
-        return intersection.size / (Math.log(set1.size + 1) * Math.log(set2.size + 1));
-      }
-      
-      // Public API
-      return {
-        summarize(text, numSentences = 3) {
-          // Step 1: Split text into sentences
-          const sentences = splitIntoSentences(text);
-          
-          if (sentences.length <= numSentences) {
-            return text;  // Text already short enough
-          }
-          
-          // Step 2: Preprocess each sentence
-          const preprocessedSentences = sentences.map(preprocess);
-          
-          // Step 3: Build similarity matrix (optimization: store only upper triangular part)
-          const similarities = {};
-          for (let i = 0; i < sentences.length; i++) {
-            for (let j = i + 1; j < sentences.length; j++) {
-              const similarity = calculateSimilarity(
-                preprocessedSentences[i],
-                preprocessedSentences[j]
-              );
-              similarities[`${i}-${j}`] = similarity;
-            }
-          }
-          
-          // Step 4: Run TextRank algorithm
-          const scores = Array(sentences.length).fill(1); // Initialize scores
-          
-          for (let iter = 0; iter < ITERATIONS; iter++) {
-            const newScores = Array(sentences.length).fill(0);
-            
-            for (let i = 0; i < sentences.length; i++) {
-              for (let j = 0; j < sentences.length; j++) {
-                if (i !== j) {
-                  // Get similarity (check both directions in our stored matrix)
-                  let sim;
-                  if (i < j) {
-                    sim = similarities[`${i}-${j}`] || 0;
-                  } else {
-                    sim = similarities[`${j}-${i}`] || 0;
-                  }
-                  
-                  newScores[i] += sim * scores[j];
-                }
-              }
-              newScores[i] = (1 - DAMPING) + DAMPING * newScores[i];
-            }
-            
-            // Update scores
-            for (let i = 0; i < scores.length; i++) {
-              scores[i] = newScores[i];
-            }
-          }
-          
-          // Step 5: Select top sentences while preserving order
-          const topSentences = sentences
-            .map((sentence, index) => ({ sentence, score: scores[index], index }))
-            .sort((a, b) => b.score - a.score)
-            .slice(0, numSentences)
-            .sort((a, b) => a.index - b.index)
-            .map(item => item.sentence);
-            
-          // Step 6: Join selected sentences
-          return topSentences.join(' ');
-        }
-      };
-    })();
-    
-    /**
-     * UI Controller - Handles all user interface interactions
-     */
-    const UIController = (() => {
-      const elements = {
-        inputText: document.getElementById('inputText'),
-        outputSummary: document.getElementById('outputSummary'),
-        summarizeBtn: document.getElementById('summarizeBtn'),
-        sentenceCount: document.getElementById('sentenceCount'),
-        status: document.getElementById('status'),
-        summaryMethod: document.getElementById('summaryMethod'),
-        modelStatus: document.getElementById('modelStatus')
-      };
-      
-      return {
-        updateStatus(message) {
-          elements.status.textContent = message;
-        },
-        
-        toggleButton(disabled = false) {
-          elements.summarizeBtn.disabled = disabled;
-        },
-        
-        getSummaryLength() {
-          const value = parseInt(elements.sentenceCount.value);
-          return isNaN(value) || value < 1 ? 3 : Math.min(value, 10);
-        },
-        
-        getInputText() {
-          return elements.inputText.value;
-        },
-        
-        displaySummary(summary) {
-          elements.outputSummary.value = summary;
-        },
-        
-        getSelectedMethod() {
-          return elements.summaryMethod.value;
-        },
-        
-        toggleModelStatusVisibility(visible) {
-          elements.modelStatus.style.display = visible ? 'block' : 'none';
-        }
-      };
-    })();
-    
-    /**
-     * App Controller - Main application logic
-     */
-    const App = (() => {
-      async function handleSummarize() {
-        const inputText = UIController.getInputText();
-        
-        if (!inputText.trim()) {
-          UIController.updateStatus("Please enter some text to summarize");
-          return;
-        }
-        
-        UIController.toggleButton(true);
-        UIController.updateStatus("Summarizing...");
-        
-        const method = UIController.getSelectedMethod();
-        const sentenceCount = UIController.getSummaryLength();
-        const start = performance.now();
-        
-        try {
-          let summary;
-          
-          if (method === 'extractive') {
-            // Use ML-based summarization
-            summary = await MLSummarizer.summarize(inputText, sentenceCount);
-          } else {
-            // Use local processing (fallback)
-            summary = TextSummarizer.summarize(inputText, sentenceCount);
-          }
-          
-          const processingTime = Math.round(performance.now() - start);
-          UIController.displaySummary(summary);
-          UIController.updateStatus(`Summarized in ${processingTime}ms (${sentenceCount} sentences) using ${method === 'extractive' ? 'ML model' : 'local processing'}`);
-        } catch (error) {
-          console.error("Summarization error:", error);
-          UIController.updateStatus(`Error: ${error.message}`);
-        } finally {
-          UIController.toggleButton(false);
-        }
-      }
-      
-      function handleMethodChange() {
-        const method = UIController.getSelectedMethod();
-        UIController.toggleModelStatusVisibility(method === 'extractive');
-        
-        if (method === 'extractive') {
-          // Pre-load the model when the user selects ML method
-          MLSummarizer.isModelAvailable().catch(console.error);
-        }
-      }
-      
-      function init() {
-        // Set up event listeners
-        document.getElementById('summarizeBtn').addEventListener('click', handleSummarize);
-        document.getElementById('summaryMethod').addEventListener('change', handleMethodChange);
-        
-        // Initialize
-        handleMethodChange();
-        UIController.updateStatus("Ready to summarize");
-      }
-      
-      return {
-        init
-      };
-    })();
-    
-    // Initialize the application when the DOM is fully loaded
-    document.addEventListener('DOMContentLoaded', App.init);
-  </script>
+  <h2>Summaries</h2>
+  
+  <div class="summary-tabs">
+    <div class="summary-tab" data-tab="key-elements">Key Elements</div>
+    <div class="summary-tab" data-tab="basic-summary">Basic Summary</div>
+    <div class="summary-tab active" data-tab="enhanced-summary">Enhanced Summary</div>
+  </div>
+  
+  <div class="summary-content" id="key-elements-content">
+    <div class="key-element-section">
+      <h4>Key Themes</h4>
+      <div class="key-elements" id="key-themes"></div>
+    </div>
+    <div class="key-element-section">
+      <h4>Entities & Terms</h4>
+      <div class="key-elements" id="key-entities"></div>
+    </div>
+    <div class="key-element-section">
+      <h4>Important Points</h4>
+      <div id="key-points"></div>
+    </div>
+  </div>
+  
+  <div class="summary-content" id="basic-summary-content">
+    <textarea id="outputSummary" readonly></textarea>
+  </div>
+  
+  <div class="summary-content active" id="enhanced-summary-content">
+    <div class="enhanced-summary" id="enhancedSummaryText"></div>
+  </div>
 </body>
 </html>

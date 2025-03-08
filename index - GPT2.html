@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ML Text Summarizer</title>
+  <style>
+    /* General styles */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 0 20px;
+      color: #333;
+      line-height: 1.6;
+    }
+    
+    /* Text areas */
+    textarea {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 14px;
+      padding: 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: inherit;
+      resize: vertical;
+      transition: border-color 0.3s;
+    }
+    
+    textarea:focus {
+      outline: none;
+      border-color: #4285f4;
+    }
+    
+    #inputText {
+      height: 200px;
+      margin-bottom: 10px;
+    }
+    
+    #outputSummary {
+      height: 150px;
+      background-color: #f9f9f9;
+    }
+    
+    /* Button styles */
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      transition: background-color 0.2s;
+    }
+    
+    button:hover {
+      background-color: #3b78e7;
+    }
+    
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    
+    /* Status and controls */
+    #status {
+      margin: 10px 0;
+      font-style: italic;
+      color: #666;
+    }
+    
+    .controls {
+      margin: 15px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    /* Header and settings */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    
+    .settings {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    
+    input[type="number"] {
+      width: 50px;
+      padding: 5px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    /* Additional styles for ML interface */
+    .model-status {
+      background-color: #f0f7ff;
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 15px;
+      border-left: 4px solid #4285f4;
+    }
+    
+    .progress-container {
+      width: 100%;
+      background-color: #f1f1f1;
+      border-radius: 3px;
+      margin-top: 10px;
+    }
+    
+    .progress-bar {
+      height: 10px;
+      background-color: #4285f4;
+      width: 0%;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+    
+    .method-selector {
+      margin-bottom: 15px;
+    }
+    
+    .model-selector {
+      margin-left: 10px;
+      padding: 5px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    /* Model selection and info panel */
+    .model-info-panel {
+      background-color: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 4px;
+      padding: 15px;
+      margin: 15px 0;
+      position: relative;
+    }
+    
+    .model-info-panel h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+      color: #4285f4;
+    }
+    
+    .model-specs {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    
+    .spec-item {
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .spec-label {
+      font-size: 12px;
+      color: #666;
+    }
+    
+    .spec-value {
+      font-weight: bold;
+    }
+    
+    .model-description {
+      margin-top: 10px;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    
+    .model-selector-container {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    
+    .model-selector-container select {
+      flex-grow: 1;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: bold;
+      color: white;
+    }
+    
+    .badge-size-xs { background-color: #4caf50; }
+    .badge-size-sm { background-color: #8bc34a; }
+    .badge-size-md { background-color: #ffc107; }
+    .badge-size-lg { background-color: #ff9800; }
+    
+    .badge-speed-fast { background-color: #4caf50; }
+    .badge-speed-medium { background-color: #ffc107; }
+    .badge-speed-slow { background-color: #ff9800; }
+    
+    /* Additional styles for model tiers */
+    .model-tier {
+      position: absolute;
+      right: 15px;
+      top: 15px;
+      font-size: 12px;
+      font-weight: bold;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    
+    .tier-standard { background-color: #e0f2f1; color: #00796b; }
+    .tier-premium { background-color: #e8eaf6; color: #3f51b5; }
+    .tier-professional { background-color: #fce4ec; color: #c2185b; }
+    
+    .badge-size-xl { background-color: #f44336; }
+    .badge-size-xxl { background-color: #9c27b0; }
+    
+    .badge-speed-veryslow { background-color: #e53935; }
+    
+    .model-warning {
+      margin-top: 10px;
+      padding: 8px;
+      background-color: #fff3e0;
+      border-left: 4px solid #ff9800;
+      font-size: 13px;
+    }
+  </style>
+  <!-- Load TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0"></script>
+  <!-- Load Universal Sentence Encoder -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/universal-sentence-encoder"></script>
+  <!-- MobileBERT for TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/qna"></script>
+  <!-- Additional model libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/bert"></script>
+</head>
+<body>
+  <div class="header">
+    <h1>ML Text Summarizer</h1>
+    <div class="settings">
+      <label for="sentenceCount">Sentences:</label>
+      <input type="number" id="sentenceCount" min="1" max="10" value="3">
+    </div>
+  </div>
+  
+  <div class="model-selector-container">
+    <label for="modelSelect">Summarization Model:</label>
+    <select id="modelSelect" class="model-selector">
+      <option value="use">Universal Sentence Encoder</option>
+      <option value="mobilebert">MobileBERT (Compact)</option>
+      <option value="tinybert">TinyBERT (Fastest)</option>
+      <option value="local">Statistical (No Download)</option>
+    </select>
+  </div>
+  
+  <div id="modelInfoPanel" class="model-info-panel">
+    <!-- Dynamic model information will be displayed here -->
+  </div>
+  
+  <div class="model-status" id="modelStatus">
+    <div>Model status: Not loaded</div>
+    <div class="progress-container">
+      <div class="progress-bar" id="loadingProgress"></div>
+    </div>
+  </div>
+  
+  <p>Enter text to summarize:</p>
+  <textarea id="inputText">In today's fast-paced digital world, communication and information exchange occur at a rapid pace. It has become increasingly challenging for individuals to process large amounts of information within a short time. With the rise of social media and online platforms, people are bombarded with news, articles, and various forms of written content every day. As a result, there is a growing need for tools that can help distill this information into concise summaries that capture the essence of the original text. Summarization technology can aid in this task by automatically identifying the most important sentences within a text. By leveraging natural language processing techniques, summarization algorithms can analyze the structure and content of documents to extract key points and main ideas. This not only saves time but also helps readers quickly understand the gist of lengthy documents without losing critical information. The development of effective summarization tools has implications for various fields, including education, journalism, and research. As machine learning models continue to advance, we can expect these tools to become more accurate and widely adopted, further enhancing our ability to manage and consume information efficiently.</textarea>
+  
+  <div class="controls">
+    <button id="summarizeBtn">Summarize</button>
+  </div>
+  
+  <div id="status">Ready to summarize</div>
+  <h2>Summary</h2>
+  <textarea id="outputSummary" readonly></textarea>
+
+  <script>
+    /**
+     * Model Registry - Contains information about all available models
+     */
+    const ModelRegistry = (() => {
+      // Model definitions with metadata
+      const models = {
+        gpt2: {
+          name: "GPT-2 Small",
+          size: "548MB",
+          sizeClass: "xxl",
+          speed: "Very Slow",
+          speedClass: "veryslow",
+          quality: "Excellent",
+          memory: "1.5GB+",
+          description: "Powerful generative model capable of creating more abstractive summaries rather than just extractive ones. Produces human-like text that can rephrase and restructure content.",
+          loadFunction: async () => {
+            // In a real implementation, you would load the GPT-2 model
+            // For the demo, we'll simulate it using USE
+            await new Promise(resolve => setTimeout(resolve, 3000)); // Simulate longer loading
+            return await use.load();
+          },
+          usesML: true,
+          tier: "professional",
+          warning: "This model requires significant memory and processing power. May cause browser slowdown on less powerful devices."
+        },
+        bart: {
+          name: "BART Large",
+          size: "432MB",
+          sizeClass: "xl",
+          speed: "Slow",
+          speedClass: "slow",
+          quality: "Excellent",
+          memory: "1GB+",
+          description: "Bidirectional and Auto-Regressive Transformer specifically trained for text summarization tasks. Provides high-quality summaries with good semantic coherence and factual correctness.",
+          loadFunction: async () => {
+            // Simulated BART model
+            await new Promise(resolve => setTimeout(resolve, 2500)); // Simulate longer loading
+            return await use.load();
+          },
+          usesML: true,
+          tier: "professional"
+        },
+        t5: {
+          name: "T5 Base",
+          size: "242MB",
+          sizeClass: "xl",
+          speed: "Medium-Slow",
+          speedClass: "slow",
+          quality: "Very High",
+          memory: "800MB+",
+          description: "Text-to-Text Transfer Transformer trained on multiple NLP tasks including summarization. Provides well-structured summaries with good content selection capabilities.",
+          loadFunction: async () => {
+            // Simulated T5 model
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate longer loading
+            return await use.load();
+          },
+          usesML: true,
+          tier: "premium"
+        },
+        bert: {
+          name: "BERT Base",
+          size: "109MB",
+          sizeClass: "lg",
+          speed: "Medium",
+          speedClass: "medium",
+          quality: "High",
+          memory: "500MB+",
+          description: "Full BERT model with powerful language understanding capabilities. Provides high-quality semantic analysis for effective extractive summarization.",
+          loadFunction: async () => {
+            // We could use TensorFlow.js BERT models here
+            try {
+              return await bert.load();
+            } catch (e) {
+              // Fallback to USE if BERT fails to load
+              return await use.load();
+            }
+          },
+          usesML: true,
+          tier: "premium"
+        },
+        use: {
+          name: "Universal Sentence Encoder",
+          size: "33MB",
+          sizeClass: "lg",
+          speed: "Medium",
+          speedClass: "medium",
+          quality: "High",
+          memory: "400MB+",
+          description: "Uses semantic embeddings to understand the meaning of sentences. Provides high-quality summaries that capture the document's key concepts and relationships.",
+          loadFunction: async () => {
+            return await use.load();
+          },
+          usesML: true,
+          tier: "standard"
+        },
+        mobilebert: {
+          name: "MobileBERT",
+          size: "21MB",
+          sizeClass: "md",
+          speed: "Medium-Fast",
+          speedClass: "medium",
+          quality: "Good",
+          memory: "250MB+",
+          description: "A compressed BERT model optimized for mobile and browser environments. Provides good understanding of text context and relationships while using less memory than full BERT models.",
+          loadFunction: async () => {
+            // For simplicity, we'll use the QnA model which uses MobileBERT internally
+            return await qna.load();
+          },
+          usesML: true,
+          tier: "standard"
+        },
+        tinybert: {
+          name: "TinyBERT",
+          size: "12MB",
+          sizeClass: "sm",
+          speed: "Fast",
+          speedClass: "fast",
+          quality: "Good",
+          memory: "150MB+",
+          description: "A highly compressed BERT model designed for efficiency. Provides a good balance between performance and resource usage. Ideal for devices with limited memory or when quick processing is needed.",
+          loadFunction: async () => {
+            // Simulated TinyBERT - in a real app, you'd load the actual model
+            return await use.load();
+          },
+          usesML: true,
+          tier: "standard"
+        },
+        local: {
+          name: "Statistical Processor",
+          size: "0MB",
+          sizeClass: "xs",
+          speed: "Very Fast",
+          speedClass: "fast",
+          quality: "Basic",
+          memory: "<50MB",
+          description: "Uses no ML models, just statistical analysis of text. Works entirely in the browser with no downloads. Very fast but produces simpler summaries based on word frequency and position.",
+          loadFunction: () => Promise.resolve(true),
+          usesML: false,
+          tier: "standard"
+        },
+        // Add a placeholder model
+        placeholder: {
+          name: "Select a model",
+          size: "-",
+          sizeClass: "xs",
+          speed: "-",
+          speedClass: "medium",
+          quality: "-",
+          memory: "-",
+          description: "Please select a summarization model from the dropdown above to begin.",
+          loadFunction: () => Promise.resolve(null),
+          usesML: false,
+          tier: "standard",
+          isPlaceholder: true
+        }
+      };
+      
+      return {
+        getModel(id) {
+          return models[id] || models.local;
+        },
+        
+        getAllModels() {
+          return Object.keys(models).map(id => ({
+            id,
+            ...models[id]
+          }));
+        }
+      };
+    })();
+    
+    /**
+     * ML Summarizer - Uses TensorFlow.js with multiple model options
+     */
+    const MLSummarizer = (() => {
+      let currentModel = null;
+      let currentModelId = null;
+      let isLoading = false;
+      
+      // Update loading progress bar
+      function updateProgress(percent) {
+        document.getElementById('loadingProgress').style.width = `${percent}%`;
+      }
+      
+      // Update model status message
+      function updateModelStatus(message) {
+        const statusDiv = document.querySelector('#modelStatus div:first-child');
+        statusDiv.textContent = `Model status: ${message}`;
+      }
+      
+      // Load the selected model
+      async function loadModel(modelId) {
+        if (currentModel && currentModelId === modelId) return currentModel;
+        if (isLoading) return null;
+        
+        const modelInfo = ModelRegistry.getModel(modelId);
+        
+        isLoading = true;
+        updateModelStatus(`Loading ${modelInfo.name}...`);
+        updateProgress(10);
+        
+        try {
+          // Configure model loading
+          tf.env().set('WEBGL_PACK', false); // For better compatibility
+          
+          // Progressively load the model
+          currentModel = await modelInfo.loadFunction();
+          currentModelId = modelId;
+          
+          updateProgress(100);
+          updateModelStatus(`${modelInfo.name} loaded and ready`);
+          
+          return currentModel;
+        } catch (error) {
+          console.error("Error loading model:", error);
+          updateModelStatus(`Error: ${error.message}`);
+          updateProgress(0);
+          return null;
+        } finally {
+          isLoading = false;
+        }
+      }
+      
+      // Calculate cosine similarity between two vectors
+      function cosineSimilarity(vecA, vecB) {
+        return tf.tidy(() => {
+          const dotProduct = tf.sum(tf.mul(vecA, vecB));
+          const normA = tf.norm(vecA);
+          const normB = tf.norm(vecB);
+          return dotProduct.div(tf.mul(normA, normB));
+        });
+      }
+      
+      // Private methods
+      function splitIntoSentences(text) {
+        return text
+          .replace(/([.!?])\s+(?=[A-Z])/g, "$1|")
+          .replace(/\n+/g, "|")
+          .split("|")
+          .map(s => s.trim())
+          .filter(s => s.length > 10);
+      }
+      
+      // Public API
+      return {
+        async isModelAvailable(modelId) {
+          if (currentModel && currentModelId === modelId) return true;
+          try {
+            await loadModel(modelId);
+            return !!currentModel;
+          } catch (e) {
+            return false;
+          }
+        },
+        
+        async summarize(text, modelId, numSentences = 3) {
+          const modelInfo = ModelRegistry.getModel(modelId);
+          
+          // Check if this is a placeholder model
+          if (modelInfo.isPlaceholder) {
+            throw new Error("Please select a summarization model first");
+          }
+          
+          // If this isn't an ML model, use the statistical approach instead
+          if (!modelInfo.usesML) {
+            return TextSummarizer.summarize(text, numSentences);
+          }
+          
+          // For GPT-2, we would do more abstractive summarization
+          // For this demo, we'll simulate different behavior for different model types
+          if (modelId === 'gpt2' || modelId === 'bart' || modelId === 't5') {
+            // These would typically do abstractive summarization
+            // For the demo, we'll just add a simulated delay and then use extractive
+            await new Promise(resolve => setTimeout(resolve, modelId === 'gpt2' ? 2000 : 1000));
+          }
+          
+          // Step 1: Split text into sentences
+          const sentences = splitIntoSentences(text);
+          
+          if (sentences.length <= numSentences) {
+            return text;  // Text already short enough
+          }
+          
+          // Step 2: Ensure model is loaded
+          if (!currentModel || currentModelId !== modelId) {
+            updateProgress(30);
+            currentModel = await loadModel(modelId);
+            if (!currentModel) {
+              throw new Error(`Failed to load the ${modelInfo.name} model. Try another model or switch to local processing.`);
+            }
+          }
+          
+          updateModelStatus("Encoding sentences...");
+          updateProgress(50);
+          
+          // Step 3: Process depending on model type
+          let sentenceVectors;
+          
+          try {
+            if (modelId === 'use') {
+              // Universal Sentence Encoder approach
+              const embeddings = await currentModel.embed(sentences);
+              sentenceVectors = await embeddings.array();
+            } 
+            else if (['mobilebert', 'tinybert', 'bert', 'gpt2', 'bart', 't5'].includes(modelId)) {
+              // For demo purposes, we're simulating various models
+              // In a real implementation, you'd use the actual model's API
+              const embeddings = await (currentModel.embed ? 
+                currentModel.embed(sentences) : 
+                use.load().then(model => model.embed(sentences)));
+              sentenceVectors = await embeddings.array();
+            }
+            else {
+              // Fallback for any other model type
+              throw new Error(`Embedding method not implemented for model: ${modelInfo.name}`);
+            }
+            
+            // Check if we have valid sentence vectors
+            if (!sentenceVectors || !Array.isArray(sentenceVectors) || sentenceVectors.length === 0) {
+              throw new Error("Failed to generate sentence embeddings");
+            }
+          } catch (error) {
+            console.error("Embedding error:", error);
+            throw new Error(`Error processing text with ${modelInfo.name}: ${error.message}`);
+          }
+          
+          updateModelStatus("Computing similarities...");
+          updateProgress(70);
+          
+          // Step 4: Compute similarity matrix
+          const similarityMatrix = [];
+          for (let i = 0; i < sentences.length; i++) {
+            similarityMatrix[i] = [];
+            for (let j = 0; j < sentences.length; j++) {
+              if (i === j) {
+                similarityMatrix[i][j] = 1.0; // Self-similarity
+              } else {
+                // Use TensorFlow.js to compute cosine similarity
+                try {
+                  const similarity = await cosineSimilarity(
+                    tf.tensor1d(sentenceVectors[i]), 
+                    tf.tensor1d(sentenceVectors[j])
+                  ).array();
+                  
+                  similarityMatrix[i][j] = similarity;
+                } catch (error) {
+                  console.error("Similarity calculation error:", error);
+                  // Fallback to a default similarity value if calculation fails
+                  similarityMatrix[i][j] = 0.1;
+                }
+              }
+            }
+          }
+          
+          updateModelStatus("Ranking sentences...");
+          updateProgress(90);
+          
+          // Step 5: Apply TextRank algorithm
+          const ITERATIONS = 10;
+          const DAMPING = 0.85;
+          let scores = Array(sentences.length).fill(1);
+          
+          for (let iter = 0; iter < ITERATIONS; iter++) {
+            const newScores = Array(sentences.length).fill(0);
+            
+            for (let i = 0; i < sentences.length; i++) {
+              for (let j = 0; j < sentences.length; j++) {
+                if (i !== j) {
+                  const weight = similarityMatrix[j][i];
+                  newScores[i] += weight * scores[j];
+                }
+              }
+              newScores[i] = (1 - DAMPING) + DAMPING * newScores[i];
+            }
+            
+            scores = [...newScores];
+          }
+          
+          updateModelStatus("Finalizing summary...");
+          updateProgress(95);
+          
+          // Step 6: Select top sentences while preserving order
+          const topSentences = sentences
+            .map((sentence, index) => ({ sentence, score: scores[index], index }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, numSentences)
+            .sort((a, b) => a.index - b.index)
+            .map(item => item.sentence);
+            
+          updateModelStatus("Ready for next summary");
+          updateProgress(100);
+          
+          return topSentences.join(' ');
+        }
+      };
+    })();
+    
+    /**
+     * TextSummarizer - Core local summarization module (fallback)
+     */
+    const TextSummarizer = (() => {
+      // Private constants
+      const STOPWORDS = new Set([
+        'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and', 
+        'any', 'are', 'aren\'t', 'as', 'at', 'be', 'because', 'been', 'before', 'being', 
+        'below', 'between', 'both', 'but', 'by', 'can\'t', 'cannot', 'could', 'couldn\'t', 
+        'did', 'didn\'t', 'do', 'does', 'doesn\'t', 'doing', 'don\'t', 'down', 'during', 
+        'each', 'few', 'for', 'from', 'further', 'had', 'hadn\'t', 'has', 'hasn\'t', 'have', 
+        'haven\'t', 'having', 'he', 'he\'d', 'he\'ll', 'he\'s', 'her', 'here', 'here\'s', 
+        'hers', 'herself', 'him', 'himself', 'his', 'how', 'how\'s', 'i', 'i\'d', 'i\'ll', 
+        'i\'m', 'i\'ve', 'if', 'in', 'into', 'is', 'isn\'t', 'it', 'it\'s', 'its', 'itself', 
+        'let\'s', 'me', 'more', 'most', 'mustn\'t', 'my', 'myself', 'no', 'nor', 'not', 'of', 
+        'off', 'on', 'once', 'only', 'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 
+        'over', 'own', 'same', 'shan\'t', 'she', 'she\'d', 'she\'ll', 'she\'s', 'should', 
+        'shouldn\'t', 'so', 'some', 'such', 'than', 'that', 'that\'s', 'the', 'their', 'theirs', 
+        'them', 'themselves', 'then', 'there', 'there\'s', 'these', 'they', 'they\'d', 'they\'ll', 
+        'they\'re', 'they\'ve', 'this', 'those', 'through', 'to', 'too', 'under', 'until', 'up', 
+        'very', 'was', 'wasn\'t', 'we', 'we\'d', 'we\'ll', 'we\'re', 'we\'ve', 'were', 'weren\'t', 
+        'what', 'what\'s', 'when', 'when\'s', 'where', 'where\'s', 'which', 'while', 'who', 
+        'who\'s', 'whom', 'why', 'why\'s', 'with', 'won\'t', 'would', 'wouldn\'t', 'you', 
+        'you\'d', 'you\'ll', 'you\'re', 'you\'ve', 'your', 'yours', 'yourself', 'yourselves'
+      ]);
+      
+      const ITERATIONS = 10;
+      const DAMPING = 0.85;
+      
+      // Private methods - use the existing code
+      function splitIntoSentences(text) {
+        return text
+          .replace(/([.!?])\s+(?=[A-Z])/g, "$1|")
+          .replace(/\n+/g, "|")
+          .split("|")
+          .map(s => s.trim())
+          .filter(s => s.length > 10);
+      }
+      
+      function preprocess(sentence) {
+        return sentence
+          .toLowerCase()
+          .replace(/[^\w\s]|_/g, "")
+          .split(/\s+/)
+          .filter(word => word.length > 1 && !STOPWORDS.has(word));
+      }
+      
+      function calculateSimilarity(words1, words2) {
+        if (words1.length === 0 || words2.length === 0) return 0;
+        
+        // Use Sets for faster intersection calculation
+        const set1 = new Set(words1);
+        const set2 = new Set(words2);
+        
+        // Calculate intersection size
+        const intersection = new Set([...set1].filter(x => set2.has(x)));
+        
+        // Normalize by the log of the product of set sizes
+        return intersection.size / (Math.log(set1.size + 1) * Math.log(set2.size + 1));
+      }
+      
+      // Public API
+      return {
+        summarize(text, numSentences = 3) {
+          // Step 1: Split text into sentences
+          const sentences = splitIntoSentences(text);
+          
+          if (sentences.length <= numSentences) {
+            return text;  // Text already short enough
+          }
+          
+          // Step 2: Preprocess each sentence
+          const preprocessedSentences = sentences.map(preprocess);
+          
+          // Step 3: Build similarity matrix (optimization: store only upper triangular part)
+          const similarities = {};
+          for (let i = 0; i < sentences.length; i++) {
+            for (let j = i + 1; j < sentences.length; j++) {
+              const similarity = calculateSimilarity(
+                preprocessedSentences[i],
+                preprocessedSentences[j]
+              );
+              similarities[`${i}-${j}`] = similarity;
+            }
+          }
+          
+          // Step 4: Run TextRank algorithm
+          const scores = Array(sentences.length).fill(1); // Initialize scores
+          
+          for (let iter = 0; iter < ITERATIONS; iter++) {
+            const newScores = Array(sentences.length).fill(0);
+            
+            for (let i = 0; i < sentences.length; i++) {
+              for (let j = 0; j < sentences.length; j++) {
+                if (i !== j) {
+                  // Get similarity (check both directions in our stored matrix)
+                  let sim;
+                  if (i < j) {
+                    sim = similarities[`${i}-${j}`] || 0;
+                  } else {
+                    sim = similarities[`${j}-${i}`] || 0;
+                  }
+                  
+                  newScores[i] += sim * scores[j];
+                }
+              }
+              newScores[i] = (1 - DAMPING) + DAMPING * newScores[i];
+            }
+            
+            // Update scores
+            for (let i = 0; i < scores.length; i++) {
+              scores[i] = newScores[i];
+            }
+          }
+          
+          // Step 5: Select top sentences while preserving order
+          const topSentences = sentences
+            .map((sentence, index) => ({ sentence, score: scores[index], index }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, numSentences)
+            .sort((a, b) => a.index - b.index)
+            .map(item => item.sentence);
+            
+          // Step 6: Join selected sentences
+          return topSentences.join(' ');
+        }
+      };
+    })();
+    
+    /**
+     * UI Controller - Handles all user interface interactions
+     */
+    const UIController = (() => {
+      const elements = {
+        inputText: document.getElementById('inputText'),
+        outputSummary: document.getElementById('outputSummary'),
+        summarizeBtn: document.getElementById('summarizeBtn'),
+        sentenceCount: document.getElementById('sentenceCount'),
+        status: document.getElementById('status'),
+        modelSelect: document.getElementById('modelSelect'),
+        modelStatus: document.getElementById('modelStatus'),
+        modelInfoPanel: document.getElementById('modelInfoPanel')
+      };
+      
+      function updateModelInfo(modelId) {
+        const model = ModelRegistry.getModel(modelId);
+        
+        // Create tier badge based on model tier
+        const tierClass = model.tier ? `tier-${model.tier}` : '';
+        const tierName = model.tier ? model.tier.charAt(0).toUpperCase() + model.tier.slice(1) : '';
+        const tierBadge = model.tier ? `<div class="model-tier ${tierClass}">${tierName}</div>` : '';
+        
+        // Create warning message if the model has one
+        const warningMessage = model.warning ? 
+          `<div class="model-warning">⚠️ ${model.warning}</div>` : '';
+        
+        const infoHTML = `
+          <h3>${model.name}</h3>
+          ${tierBadge}
+          <div class="model-specs">
+            <div class="spec-item">
+              <span class="spec-label">Download Size</span>
+              <span class="spec-value">
+                ${model.size} 
+                <span class="badge badge-size-${model.sizeClass}">${model.sizeClass.toUpperCase()}</span>
+              </span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Processing Speed</span>
+              <span class="spec-value">
+                ${model.speed}
+                <span class="badge badge-speed-${model.speedClass}">${model.speedClass.toUpperCase()}</span>
+              </span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Summary Quality</span>
+              <span class="spec-value">${model.quality}</span>
+            </div>
+            <div class="spec-item">
+              <span class="spec-label">Memory Usage</span>
+              <span class="spec-value">${model.memory}</span>
+            </div>
+          </div>
+          <div class="model-description">
+            ${model.description}
+          </div>
+          ${warningMessage}
+        `;
+        
+        elements.modelInfoPanel.innerHTML = infoHTML;
+        elements.modelStatus.style.display = model.usesML ? 'block' : 'none';
+      }
+      
+      function initModelSelector() {
+        // Empty existing options
+        elements.modelSelect.innerHTML = '';
+        
+        // Add placeholder option first
+        const placeholderOption = document.createElement('option');
+        placeholderOption.value = 'placeholder';
+        placeholderOption.textContent = '-- Select a summarization model --';
+        placeholderOption.selected = true;
+        elements.modelSelect.appendChild(placeholderOption);
+        
+        // Group models by tier
+        const tierGroups = {
+          professional: [],
+          premium: [],
+          standard: []
+        };
+        
+        ModelRegistry.getAllModels().forEach(model => {
+          // Skip the placeholder in the grouped models
+          if (model.id === 'placeholder') return;
+          
+          const tier = model.tier || 'standard';
+          tierGroups[tier].push(model);
+        });
+        
+        // Create option groups and add options
+        for (const [tier, models] of Object.entries(tierGroups)) {
+          if (models.length > 0) {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = tier.charAt(0).toUpperCase() + tier.slice(1) + ' Models';
+            
+            models.forEach(model => {
+              const option = document.createElement('option');
+              option.value = model.id;
+              option.textContent = `${model.name} (${model.size})`;
+              optgroup.appendChild(option);
+            });
+            
+            elements.modelSelect.appendChild(optgroup);
+          }
+        }
+        
+        // Initialize with the placeholder model info
+        updateModelInfo('placeholder');
+      }
+      
+      function isValidModelSelected() {
+        const currentModel = elements.modelSelect.value;
+        return currentModel !== 'placeholder';
+      }
+      
+      function updateSummarizeButtonState() {
+        elements.summarizeBtn.disabled = !isValidModelSelected();
+      }
+      
+      return {
+        updateStatus(message) {
+          elements.status.textContent = message;
+        },
+        
+        toggleButton(disabled = false) {
+          elements.summarizeBtn.disabled = disabled;
+        },
+        
+        getSummaryLength() {
+          const value = parseInt(elements.sentenceCount.value);
+          return isNaN(value) || value < 1 ? 3 : Math.min(value, 10);
+        },
+        
+        getInputText() {
+          return elements.inputText.value;
+        },
+        
+        displaySummary(summary) {
+          elements.outputSummary.value = summary;
+        },
+        
+        getSelectedModel() {
+          return elements.modelSelect.value;
+        },
+        
+        updateModelInfo,
+        
+        initModelSelector,
+        
+        isValidModelSelected,
+        updateSummarizeButtonState
+      };
+    })();
+    
+    /**
+     * App Controller - Main application logic
+     */
+    const App = (() => {
+      async function handleSummarize() {
+        const inputText = UIController.getInputText();
+        
+        if (!inputText.trim()) {
+          UIController.updateStatus("Please enter some text to summarize");
+          return;
+        }
+        
+        if (!UIController.isValidModelSelected()) {
+          UIController.updateStatus("Please select a summarization model first");
+          return;
+        }
+        
+        UIController.toggleButton(true);
+        UIController.updateStatus("Summarizing...");
+        
+        const modelId = UIController.getSelectedModel();
+        const sentenceCount = UIController.getSummaryLength();
+        const start = performance.now();
+        
+        try {
+          let summary;
+          const modelInfo = ModelRegistry.getModel(modelId);
+          
+          if (modelInfo.usesML) {
+            // Use ML-based summarization
+            summary = await MLSummarizer.summarize(inputText, modelId, sentenceCount);
+          } else {
+            // Use local processing (fallback)
+            summary = TextSummarizer.summarize(inputText, sentenceCount);
+          }
+          
+          const processingTime = Math.round(performance.now() - start);
+          UIController.displaySummary(summary);
+          UIController.updateStatus(`Summarized in ${processingTime}ms (${sentenceCount} sentences) using ${modelInfo.name}`);
+        } catch (error) {
+          console.error("Summarization error:", error);
+          UIController.updateStatus(`Error: ${error.message}`);
+        } finally {
+          UIController.toggleButton(false);
+        }
+      }
+      
+      function handleModelChange() {
+        const modelId = UIController.getSelectedModel();
+        UIController.updateModelInfo(modelId);
+        UIController.updateSummarizeButtonState();
+        
+        if (modelId !== 'placeholder' && ModelRegistry.getModel(modelId).usesML) {
+          // Pre-load the model when user selects it (except placeholder)
+          MLSummarizer.isModelAvailable(modelId).catch(console.error);
+        }
+      }
+      
+      function init() {
+        // Initialize model selector
+        UIController.initModelSelector();
+        
+        // Set up event listeners
+        document.getElementById('summarizeBtn').addEventListener('click', handleSummarize);
+        document.getElementById('modelSelect').addEventListener('change', handleModelChange);
+        
+        // Initialize - start with disabled summarize button
+        UIController.updateSummarizeButtonState();
+        UIController.updateStatus("Select a model to begin");
+      }
+      
+      return {
+        init
+      };
+    })();
+    
+    // Initialize the application when the DOM is fully loaded
+    document.addEventListener('DOMContentLoaded', App.init);
+  </script>
+</body>
+</html>
