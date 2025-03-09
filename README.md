@@ -2,6 +2,12 @@
 
 A browser-based tool that uses machine learning and statistical algorithms to summarize text. This application leverages TensorFlow.js to run ML models directly in the browser without requiring a server.
 
+## Live Demo
+
+**Try it now**: [https://wsmontes.github.io/Summarize-It/](https://wsmontes.github.io/Summarize-It/)
+
+The application is deployed and accessible online through GitHub Pages.
+
 ## Features
 
 - **Multiple summarization methods**: Choose between ML-based or statistical approaches
@@ -22,6 +28,11 @@ A browser-based tool that uses machine learning and statistical algorithms to su
 - **No server required**: Runs entirely in the browser
   - Uses WebWorkers for non-blocking processing of large texts
   - IndexedDB for model weight storage
+- **Mobile-optimized interface**: Fully responsive design that works across all devices
+  - Touch-friendly controls with appropriate hit targets
+  - Adaptive layouts that reorganize based on screen size
+  - Optimized text input for mobile keyboards
+  - Mobile-specific UI enhancements for better readability
 
 ## Technical Implementation
 
@@ -171,6 +182,45 @@ The interface provides three views for summarized content:
 
 Progress indicators provide visual feedback during model loading and processing, with cancelable operations and background processing using Web Workers.
 
+### Responsive Design
+
+The application features a fully responsive interface optimized for mobile devices:
+
+- **Fluid Grid Layout**: Dynamically adjusts component sizes and positions based on viewport dimensions
+  - CSS Grid and Flexbox implementation for adaptive layouts
+  - Breakpoint system for targeted device-specific styling
+  - Container queries for component-level responsiveness
+
+- **Touch-Optimized Controls**:
+  - Larger touch targets for buttons and interactive elements (minimum 44×44px)
+  - Custom touch gestures for summary navigation and model selection
+  - Haptic feedback for interactive elements
+  - Mobile-friendly form inputs with appropriate keyboard types
+
+- **Mobile Performance Optimizations**:
+  - Reduced animations on low-power devices
+  - Optimized asset loading for cellular networks
+  - Deferred processing of non-critical UI elements
+  - Compressed model variants for mobile data considerations
+
+- **Adaptive Content Presentation**:
+  - Collapsible sections for better information hierarchy on small screens
+  - Font size and line height adjustments for improved readability
+  - Simplified views for constrained viewports
+  - Bottom navigation pattern for mobile access to key functions
+
+- **Device-Specific Enhancements**:
+  - Dark mode support with automatic detection of system preferences
+  - Respect for safe areas on notched devices
+  - Integration with system sharing capabilities
+  - Orientation change handling for optimal viewing experience
+
+- **Mobile Testing Framework**:
+  - Cross-device testing protocol covering iOS and Android
+  - Touch event simulation for consistent behavior
+  - Viewport emulation for development and debugging
+  - Performance benchmarking across device tiers
+
 ### Data Flow Architecture
 
 The application uses a unidirectional data flow architecture:
@@ -189,7 +239,9 @@ All processing is done in separate Web Workers to maintain UI responsiveness.
 Summarize-It/
 ├── index.html              # Main HTML file with application structure
 ├── css/
-│   └── styles.css          # Application styling
+│   ├── styles.css          # Application styling
+│   ├── responsive.css      # Responsive design rules
+│   └── mobile.css          # Mobile-specific enhancements
 ├── js/
 │   ├── app.js              # Application initialization and main logic
 │   ├── models/             # ML model implementations
@@ -214,17 +266,23 @@ Summarize-It/
 │   └── ui/                 # User interface components
 │       ├── ui-controller.js           # UI interaction handling
 │       ├── progress-indicator.js      # Progress visualization components
-│       └── view-manager.js            # Manages different summary views
+│       ├── view-manager.js            # Manages different summary views
+│       ├── responsive-handler.js      # Handles responsive layout adjustments
+│       └── touch-controller.js        # Mobile touch interaction handling
 └── server.js               # Optional simple server (not required to run the app)
 ```
 
 ## Running the Application
 
-### Method 1: Direct File Access (Recommended)
+### Method 1: GitHub Pages (Recommended)
+
+Visit [https://wsmontes.github.io/Summarize-It/](https://wsmontes.github.io/Summarize-It/) to use the application directly in your browser without any installation.
+
+### Method 2: Direct File Access
 
 Simply open the `index.html` file in your web browser. The application is designed to run directly from the file system.
 
-### Method 2: Using a Local Server (Optional)
+### Method 3: Using a Local Server (Optional)
 
 If you prefer to run it through a server:
 
@@ -260,6 +318,11 @@ Premium and professional models are also available in the interface with larger 
 - **IndexedDB Caching**: Model weights are stored locally to avoid redundant downloads
 - **Adaptive Quality**: Summary quality scales with available system resources
 - **Throttling**: Resource-intensive operations are throttled on low-end devices
+- **Mobile Optimizations**: Special considerations for mobile devices:
+  - Automatic quality adjustment based on device capabilities
+  - Reduced processing batch sizes on mobile devices
+  - Optimized touch response through event delegation
+  - Battery-aware processing that adapts to power conditions
 
 ## How to Use
 
@@ -276,6 +339,16 @@ Tested and working in:
 - Chrome (recommended)
 - Firefox
 - Edge
+- Safari (desktop and mobile)
+- Chrome for Android
+- Safari for iOS
+
+## Mobile-Specific Tips
+
+- For optimal experience on mobile devices, use the app in portrait orientation for input and landscape for viewing summaries
+- On devices with limited RAM, prefer the Statistical Processor or TinyBERT models
+- Allow "Add to Home Screen" for app-like experience with improved performance
+- When processing large documents on mobile, keep the app in the foreground to prevent background processing limitations
 
 ## Notes
 
